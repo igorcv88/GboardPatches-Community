@@ -329,3 +329,13 @@ Generated outputs:
 ## License
 
 Released under the [GNU General Public License v3.0](LICENSE).
+
+## Community fork
+
+Maintained by [igorcv88](https://github.com/igorcv88). Upstream project and original authors:
+[jasonwu1994/Gboard-patches](https://github.com/jasonwu1994/Gboard-patches).
+Existing copyright notices and license terms are retained.
+
+The fork's Morphe source is `https://github.com/igorcv88/GboardPatches-Community`.
+See [release setup and update behavior](docs/COMMUNITY_RELEASE.md); a published fork release
+is required before importing the remote source.
