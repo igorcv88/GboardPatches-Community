@@ -1,14 +1,13 @@
-<h1 align="center">Gboard Patches</h1>
+<h1 align="center">GboardPatches Community</h1>
 
 <p align="center">
   Morphe patches for Gboard with a mix of global improvements and Taiwan-focused enhancements.
 </p>
 
 <p align="center">
-  <a href="https://github.com/jasonwu1994/Gboard-patches/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/jasonwu1994/Gboard-patches?display_name=tag&label=Release&style=for-the-badge"></a>
-  <a href="https://github.com/jasonwu1994/Gboard-patches"><img alt="Total downloads" src="https://img.shields.io/github/downloads/jasonwu1994/Gboard-patches/total?label=Downloads&style=for-the-badge"></a>
-  <a href="https://morphe.software/add-source?github=jasonwu1994/Gboard-patches"><img alt="Add to Morphe" src="https://img.shields.io/badge/Morphe-Add%20Source-00A8FF?style=for-the-badge"></a>
-  <a href="https://github.com/jasonwu1994/Gboard-patches"><img alt="GitHub stars" src="https://img.shields.io/github/stars/jasonwu1994/Gboard-patches?style=social"></a>
+  <a href="https://github.com/igorcv88/GboardPatches-Community/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/igorcv88/GboardPatches-Community?display_name=tag&label=Release&style=for-the-badge"></a>
+  <a href="https://github.com/igorcv88/GboardPatches-Community"><img alt="Total downloads" src="https://img.shields.io/github/downloads/igorcv88/GboardPatches-Community/total?label=Downloads&style=for-the-badge"></a>
+  <a href="https://github.com/igorcv88/GboardPatches-Community"><img alt="GitHub stars" src="https://img.shields.io/github/stars/igorcv88/GboardPatches-Community?style=social"></a>
 </p>
 
 <p align="center">
@@ -17,7 +16,7 @@
 
 ## Overview
 
-Gboard Patches is a public Morphe source for a curated set of Gboard enhancements, including both global usability improvements and Taiwan-focused features for local input habits and day-to-day use.
+This fork is maintained by igorcv88. Remote-source setup is pending the first validated community release; see [release setup](docs/COMMUNITY_RELEASE.md). The existing Gboard enhancements are inherited from [Jason Wu’s upstream project](https://github.com/jasonwu1994/Gboard-patches).
 
 ## Included Patches
 
@@ -329,3 +328,13 @@ Generated outputs:
 ## License
 
 Released under the [GNU General Public License v3.0](LICENSE).
+
+## Community fork
+
+Maintained by [igorcv88](https://github.com/igorcv88). Upstream project and original authors:
+[jasonwu1994/Gboard-patches](https://github.com/jasonwu1994/Gboard-patches).
+Existing copyright notices and license terms are retained.
+
+The fork's Morphe source is `https://github.com/igorcv88/GboardPatches-Community`.
+See [release setup and update behavior](docs/COMMUNITY_RELEASE.md); a published fork release
+is required before importing the remote source.

@@ -1,17 +1,175 @@
-name: Release from tag
+name: Release
 
+# One workflow owns tests, compilation, metadata and GitHub Releases.
+# Never upload Actions artifacts. Manual dispatch does not run on PRs or main pushes.
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - 'v*'
+    inputs:
+      operation:
+        description: 'Release bundle, repair stable metadata, or publish existing theme previews'
+        type: choice
+        default: release
+        options:
+          - release
+          - repair-metadata
+          - theme-previews
+      tag:
+        description: 'Optional vMAJOR.MINOR.PATCH; empty increments the greatest version'
+        required: false
+        type: string
+      prerelease:
+        description: 'Publish a prerelease without changing the stable Morphe source'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  packages: read
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
 
 jobs:
   release:
-    name: Release
+    if: ${{ inputs.operation == 'release' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version and check release identity
+        env:
+          EXPLICIT_TAG: ${{ inputs.tag }}
+          PRERELEASE: ${{ inputs.prerelease }}
+          GH_TOKEN: ${{ github.token }}
+          MORPHE_TOKEN: ${{ secrets.MORPHE_PACKAGES_TOKEN }}
+        run: |
+          set -euo pipefail
+          git tag -l > "$RUNNER_TEMP/tags"
+          baseline=$(python3 -c 'import re; print(re.search(r"(?m)^version\s*=\s*(\S+)",open("gradle.properties").read()).group(1))')
+          requested="$EXPLICIT_TAG"
+          extra=()
+          if [ "$PRERELEASE" = true ]; then extra+=(--prerelease); fi
+          python3 tools/release_bundle.py resolve --tags "$RUNNER_TEMP/tags" \
+            --baseline "$baseline" --tag "$requested" "${extra[@]}" > "$RUNNER_TEMP/version"
+          cat "$RUNNER_TEMP/version" >> "$GITHUB_ENV"
+          . "$RUNNER_TEMP/version"
+          if [ "$PRERELEASE" != true ]; then
+            python3 tools/publish_source_metadata.py preflight "$GITHUB_REPOSITORY" "$VERSION"
+          fi
+          # Refuse mismatched tags before paying for a build.
+          if git show-ref --verify --quiet "refs/tags/$TAG"; then
+            test "$(git rev-parse "$TAG^{commit}")" = "$GITHUB_SHA"
+          fi
+          default_branch=$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch)
+          git merge-base --is-ancestor "$GITHUB_SHA" "origin/$default_branch" || {
+            echo '::error::Release code must already be merged into the default branch.'; exit 1;
+          }
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo '::error::This release already exists. Use a new version; published bundles are immutable.'
+            exit 1
+          fi
+          if [ -z "${MORPHE_TOKEN:-}" ]; then
+            echo '::error::MORPHE_PACKAGES_TOKEN must have access to MorpheApp/registry (read:packages).'
+            exit 1
+          fi
+        # The package registry may belong to another owner; github.token is not a substitute.
+        # This token was already required by the original upstream workflow.
+        # Signing KEYSTORE_* secrets are for APKs; this workflow publishes only a patch bundle.
+        # No signing keystore is decoded or included in the bundle/cache.
+        # GitHub keeps the secret masked in logs.
+
+      - name: Set up Java 21 and Gradle dependency/build caches
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            **/*.gradle.kts
+            gradle/libs.versions.toml
+            gradle/wrapper/gradle-wrapper.properties
+            gradle.properties
+
+      - name: Cache Robolectric Android runtimes
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ runner.os }}-${{ hashFiles('extensions/extension/build.gradle.kts') }}
+          restore-keys: robolectric-${{ runner.os }}-
+
+      - name: Test release tooling locally in the release job
+        run: python3 -m unittest discover -s tools/tests -v
+
+      - name: Tests, patch contracts and Android bundle in one Gradle invocation
+        env:
+          GITHUB_ACTOR: ${{ github.repository_owner }}
+          GITHUB_TOKEN: ${{ secrets.MORPHE_PACKAGES_TOKEN }}
+        run: |
+          bash gradlew --build-cache -Pversion="$VERSION" \
+            :extensions:extension:testDebugUnitTest \
+            :extensions:calculator:testDebugUnitTest \
+            :patches:check :patches:buildAndroid :patches:verifyReleaseBundleImport generatePatchesList
+
+      - name: Validate and prepare versioned release files
+        env:
+          BUILD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          bundle="patches/build/libs/patches-$VERSION.mpp"
+          python3 tools/release_bundle.py validate "$bundle" --version "$VERSION" --repository "$GITHUB_REPOSITORY"
+          mkdir -p release
+          cp "$bundle" "release/patches-$VERSION.mpp"
+          {
+            printf '### Gboard\n\nGboardPatches Community %s\n\n' "$VERSION"
+            printf 'Commit: `%s`\n\n' "$BUILD_SHA"
+            cat docs/COMMUNITY_RELEASE_NOTES.md
+          } > release-notes.md
+          python3 tools/release_bundle.py metadata --repository "$GITHUB_REPOSITORY" \
+            --version "$VERSION" --notes release-notes.md --output release/patches-bundle.json
+          (cd release && sha256sum "patches-$VERSION.mpp" patches-bundle.json > SHA256SUMS.txt)
+          git diff --check
+
+      - name: Publish only to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ inputs.prerelease || false }}
+        run: |
+          set -euo pipefail
+          if [ "$PRERELEASE" != true ]; then
+            python3 tools/publish_source_metadata.py preflight "$GITHUB_REPOSITORY" "$VERSION"
+          fi
+          # Fetch again after the build; never attach this bundle to another commit's tag.
+          git fetch origin --tags
+          if git show-ref --verify --quiet "refs/tags/$TAG"; then
+            test "$(git rev-parse "$TAG^{commit}")" = "$GITHUB_SHA"
+          else
+            # A competing creation of the same tag is rejected atomically by Git.
+            git push origin "$GITHUB_SHA:refs/tags/$TAG"
+          fi
+          # Stage files in a draft before making the release visible to Morphe.
+          gh release create "$TAG" release/* --verify-tag --target "$GITHUB_SHA" --draft \
+            --title "GboardPatches Community $VERSION" --notes-file release-notes.md
+          if [ "$PRERELEASE" = true ]; then
+            gh release edit "$TAG" --draft=false --prerelease --latest=false
+          else
+            gh release edit "$TAG" --draft=false --prerelease=false --latest
+          fi
+
+      - name: Update the stable Morphe source pointer
+        if: ${{ !inputs.prerelease }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/publish_source_metadata.py publish "$GITHUB_REPOSITORY" release/patches-bundle.json
+
+  theme-previews:
+    if: ${{ inputs.operation == 'theme-previews' }}
+    name: Release preview bundle
     permissions:
       contents: write
-      packages: read
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,78 +177,82 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-
-      - name: Cache Gradle
-        uses: burrunan/gradle-cache-action@v3
-
-      - name: Make Gradle wrapper executable
-        run: chmod +x ./gradlew
-
-      - name: Build
-        env:
-          GITHUB_ACTOR: ${{ github.repository_owner }}
-          GITHUB_TOKEN: ${{ secrets.MORPHE_PACKAGES_TOKEN }}
-        run: ./gradlew :patches:buildAndroid generatePatchesList
-
-      - name: Validate synced release metadata
-        id: metadata
+      - name: Validate preview assets
+        id: assets
         shell: pwsh
         env:
-          REPO_SLUG: ${{ github.repository }}
+          PREVIEW_TAG: ${{ inputs.tag }}
         run: |
-          $tag = $env:GITHUB_REF_NAME
-          if (-not $tag.StartsWith("v")) {
-              throw "Release tag must start with 'v'."
+          $tag = $env:PREVIEW_TAG
+          $target = git rev-parse "$tag^{commit}"
+          if ($LASTEXITCODE -ne 0 -or $target -ne $env:GITHUB_SHA) {
+              throw "Preview tag must point to this checked-out commit."
+          }
+          $prefix = "custom-theme-previews-"
+          if (-not $tag.StartsWith($prefix)) {
+              throw "Unexpected preview release tag: $tag"
           }
 
-          $expectedVersion = $tag.Substring(1)
-          $gradleText = Get-Content -LiteralPath "gradle.properties" -Raw
-          $match = [regex]::Match($gradleText, '(?m)^\s*version\s*=\s*([^\r\n#]+?)\s*$')
-          if (-not $match.Success) {
-              throw "Unable to resolve version from gradle.properties."
+          $version = $tag.Substring($prefix.Length)
+          if ($version -notmatch '^v[1-9][0-9]*$') {
+              throw "Preview release version must match vN: $version"
           }
 
-          $actualVersion = $match.Groups[1].Value.Trim()
-          if ($actualVersion -ne $expectedVersion) {
-              throw "Tag version '$expectedVersion' does not match gradle.properties version '$actualVersion'."
+          $assetRoot = "release-assets/custom-theme-previews/$version"
+          $archive = "$assetRoot/custom-theme-previews-$version.zip"
+          $manifestPath = "$assetRoot/custom-theme-previews-$version-manifest.json"
+          if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
+              throw "Preview archive is missing: $archive"
+          }
+          if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+              throw "Preview manifest is missing: $manifestPath"
           }
 
-          $bundle = Get-Content -LiteralPath "patches-bundle.json" -Raw | ConvertFrom-Json
-          if ([string]$bundle.version -ne $actualVersion) {
-              throw "patches-bundle.json version '$($bundle.version)' does not match '$actualVersion'."
+          $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+          if ([int]$manifest.schemaVersion -ne 1) {
+              throw "Unsupported preview manifest schema."
+          }
+          if ([string]$manifest.bundleVersion -ne $version) {
+              throw "Preview manifest version does not match tag."
+          }
+          if ([string]$manifest.asset -ne [IO.Path]::GetFileName($archive)) {
+              throw "Preview manifest asset name does not match archive."
           }
 
-          $expectedDownloadUrl = "https://github.com/$($env:REPO_SLUG)/releases/download/$tag/patches-$actualVersion.mpp"
-
-          if ([string]$bundle.download_url -ne $expectedDownloadUrl) {
-              throw "patches-bundle.json download_url does not match expected public release URL."
+          $archiveFile = Get-Item -LiteralPath $archive
+          if ([long]$manifest.compressedBytes -ne $archiveFile.Length) {
+              throw "Preview archive size does not match manifest."
           }
-          if (-not [string]::IsNullOrEmpty([string]$bundle.signature_download_url)) {
-              throw "patches-bundle.json signature_download_url must be empty for the public repo."
+          $actualSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ([string]$manifest.sha256 -ne $actualSha256) {
+              throw "Preview archive SHA-256 does not match manifest."
           }
 
-          "version=$actualVersion" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "archive=$archive" >> $env:GITHUB_OUTPUT
+          "manifest=$manifestPath" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
 
-      - name: Prepare release notes
-        shell: pwsh
-        run: |
-          $bundle = Get-Content -LiteralPath "patches-bundle.json" -Raw | ConvertFrom-Json
-          $notes = [string]$bundle.description
-          if ([string]::IsNullOrWhiteSpace($notes)) {
-              $notes = "Public mirror release for $env:GITHUB_REF_NAME."
-          }
-          Set-Content -LiteralPath "release-notes.md" -Value $notes -Encoding utf8
-
-      - name: Publish GitHub release
+      - name: Publish preview release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          body_path: release-notes.md
-          prerelease: ${{ contains(github.ref_name, '-dev.') }}
+          tag_name: ${{ steps.assets.outputs.tag }}
+          name: Custom Theme Previews ${{ steps.assets.outputs.version }}
+          body: Theme preview bundle used by the Custom Theme patch. Actual theme packs are downloaded directly from Rboard PackRepoBeta.
+          make_latest: false
           files: |
-            patches/build/libs/patches-${{ steps.metadata.outputs.version }}.mpp
+            ${{ steps.assets.outputs.archive }}
+            ${{ steps.assets.outputs.manifest }}
+
+  repair-metadata:
+    if: ${{ inputs.operation == 'repair-metadata' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Repair only the metadata of an existing stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPAIR_TAG: ${{ inputs.tag }}
+        run: python3 tools/publish_source_metadata.py repair "$GITHUB_REPOSITORY" "$REPAIR_TAG"

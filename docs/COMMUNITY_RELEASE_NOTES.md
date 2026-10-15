@@ -1,0 +1,7 @@
+Six independent native editing Access Points: Select All, Copy, Cut, Paste, Undo and Redo.
+
+A bounded, session-only journal supplies reversible toolbar Paste/Cut when the editor's native undo is an observed no-op. Host typing and external pastes use the host's undo manager. Password/private fields, incomplete extraction and active composition do not enter the local journal.
+
+Contextual favorites and native clipboard search currently have tested policy/search components only. Their 18.0.3 UI hooks are pending binary mapping; these interfaces are not enabled by this change. Retention limits, themes and the existing clipboard remain unchanged.
+
+Device validation of the new editing actions remains pending on Gboard 18.0.3. This bundle does not add 18.5.1 support.

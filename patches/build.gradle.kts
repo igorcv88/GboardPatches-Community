@@ -193,12 +193,12 @@ val generateGboardVersionBindings = tasks.register<GenerateTargetBindingsTask>(
 
 patches {
     about {
-        name = "Gboard Patches"
-        description = "Morphe patches for Gboard."
-        source = "https://github.com/jasonwu1994/gboard-patches"
-        author = "Jason Wu"
-        contact = "https://github.com/jasonwu1994/gboard-patches/issues"
-        website = "https://github.com/jasonwu1994/gboard-patches"
+        name = "GboardPatches Community"
+        description = "Community Morphe patches for Gboard, maintained by igorcv88."
+        source = "https://github.com/igorcv88/GboardPatches-Community"
+        author = "igorcv88 (upstream: Jason Wu)"
+        contact = "https://github.com/igorcv88/GboardPatches-Community/issues"
+        website = "https://github.com/igorcv88/GboardPatches-Community"
         license = "GPLv3"
     }
 }
@@ -220,6 +220,9 @@ dependencies {
     add(bindingCompilerSourceSet.implementationConfigurationName, libs.gson)
     add(patchMetadataSourceSet.implementationConfigurationName, libs.gson)
     testImplementation(libs.gson)
+    // Match the Morphe manager metadata field deserializer.
+    testImplementation("org.jetbrains.kotlinx:kotlinx-datetime:0.8.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.ow2.asm:asm-analysis:9.7.1")
     testImplementation("org.ow2.asm:asm-tree:9.7.1")
@@ -238,6 +241,16 @@ tasks {
 
     val mppJar = named<Jar>("jar") {
         dependsOn(verifyGboardCapabilityWiring)
+    }
+
+    register<JavaExec>("verifyReleaseBundleImport") {
+        group = "verification"
+        description = "Import the final MPP with the real Morphe JVM patch loader."
+        dependsOn("buildAndroid", "testClasses")
+        classpath = files(mppJar.flatMap { it.archiveFile }) + sourceSets.test.get().runtimeClasspath
+        mainClass.set("dev.jason.gboardpatches.patches.release.BundleImportProbe")
+        args(mppJar.get().archiveFile.get().asFile.absolutePath, project.version.toString(),
+            "igorcv88/GboardPatches-Community")
     }
 
     named<Test>("test") {
