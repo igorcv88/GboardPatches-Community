@@ -180,6 +180,9 @@ public final class GboardLongPressQuickActions1803Runtime {
             return false;
         }
         try {
+            Boolean shared = dev.jason.gboardpatches.extension.editingaccesspoints
+                    .GboardEditingAccessPointsRuntime.executeForConnection(connection, actionId);
+            if (shared != null) return shared;
             connection.performContextMenuAction(actionId);
             return true;
         } catch (Throwable throwable) {

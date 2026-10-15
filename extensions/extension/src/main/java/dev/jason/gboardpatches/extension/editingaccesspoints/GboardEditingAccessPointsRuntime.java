@@ -33,9 +33,24 @@ public final class GboardEditingAccessPointsRuntime {
             if (receiver instanceof InputMethodService ime) {
                 service = new WeakReference<>(ime);
                 WeakReference<InputMethodService> reference = service;
-                editor = () -> {
-                    InputMethodService current = reference.get();
-                    return current == null ? null : current.getCurrentInputConnection();
+                editor = new EditorActionSession.Editor() {
+                    @Override public android.view.inputmethod.InputConnection connection() {
+                        InputMethodService current = reference.get();
+                        return current == null ? null : current.getCurrentInputConnection();
+                    }
+                    @Override public boolean allowSnapshots() {
+                        InputMethodService current = reference.get();
+                        android.view.inputmethod.EditorInfo info = current == null
+                                ? null : current.getCurrentInputEditorInfo();
+                        if (info == null || (info.imeOptions &
+                                android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0) return false;
+                        int type = info.inputType;
+                        int variation = type & android.text.InputType.TYPE_MASK_VARIATION;
+                        return (type & android.text.InputType.TYPE_MASK_CLASS) == android.text.InputType.TYPE_CLASS_TEXT
+                                && variation != android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                                && variation != android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                                && variation != android.text.InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD;
+                    }
                 };
                 SESSION.begin(editor);
             }
@@ -48,6 +63,25 @@ public final class GboardEditingAccessPointsRuntime {
         SESSION.end();
         service.clear();
         editor = null;
+    }
+
+    public static void onSelectionUpdated(int start, int end, int candidateStart, int candidateEnd) {
+        try {
+            SESSION.onSelectionUpdated(start, end, candidateStart, candidateEnd);
+        } catch (Throwable ignored) { SESSION.end(); }
+    }
+
+    /** Null means no active shared session; callers may then use their existing native path. */
+    public static Boolean executeForConnection(android.view.inputmethod.InputConnection connection, int actionId) {
+        try {
+            InputMethodService current = service.get();
+            if (current == null || Looper.myLooper() != Looper.getMainLooper()
+                    || current.getCurrentInputConnection() != connection) return null;
+            for (EditorAction action : EditorAction.values()) {
+                if (action.contextMenuId == actionId) return SESSION.execute(action);
+            }
+        } catch (Throwable ignored) { return false; }
+        return null;
     }
 
     public static void click(EditorAction action) {

@@ -3203,8 +3203,8 @@
         <translation locale="zh-Hant">功能</translation>
     </string>
     <string name="gboard_edit_ap_summary">
-        <translation locale="en">Add Select All, Copy, Cut and Paste to the menu.</translation>
-        <translation locale="zh-Hant">將全選、複製、剪下與貼上加入選單。</translation>
+        <translation locale="en">Add Select All, Copy, Cut, Paste, Undo and Redo to the menu. Local undo covers toolbar Paste/Cut in eligible text fields up to 32,768 UTF-16 units; clipboard-card and host paste depend on the app.</translation>
+        <translation locale="zh-Hant">將全選、複製、剪下、貼上、復原與重做加入選單。本機復原僅支援工具列貼上／剪下，限可讀取且不超過 32,768 個 UTF-16 單位的文字欄位；剪貼簿卡片與其他貼上由應用程式處理。</translation>
     </string>
     <string name="gboard_edit_ap_restart">
         <translation locale="en">Changes take effect after you force stop and restart Gboard.</translation>
@@ -3225,6 +3225,14 @@
     <string name="gboard_edit_ap_paste">
         <translation locale="en">Paste</translation>
         <translation locale="zh-Hant">貼上</translation>
+    </string>
+    <string name="gboard_edit_ap_undo">
+        <translation locale="en">Undo</translation>
+        <translation locale="zh-Hant">復原</translation>
+    </string>
+    <string name="gboard_edit_ap_redo">
+        <translation locale="en">Redo</translation>
+        <translation locale="zh-Hant">重做</translation>
     </string>
     <string name="gboard_edit_ap_error">
         <translation locale="en">Editing buttons settings unavailable. Reopen settings and try again.</translation>

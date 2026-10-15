@@ -1,53 +1,243 @@
 package dev.jason.gboardpatches.extension.editingaccesspoints;
 
+import android.text.Spanned;
+import android.text.SpannedString;
+import android.view.inputmethod.ExtractedText;
+import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputConnection;
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
-/** No connection is retained across clicks. All production calls run on the IME main thread. */
+/** All calls run on the IME thread. Snapshots are bounded, transient and never logged. */
 public final class EditorActionSession {
     public interface Editor {
         InputConnection connection();
+        default boolean allowSnapshots() { return false; }
     }
 
     private WeakReference<Editor> active = new WeakReference<>(null);
+    private WeakReference<InputConnection> journalConnection = new WeakReference<>(null);
     private long generation;
+    private EditorEditTransaction transaction;
+    private Snapshot original, pasted;
+    private boolean localUndo;
+    private boolean dispatching;
+    private final List<int[]> pendingOwnSelections = new ArrayList<>();
 
     public void begin(Editor editor) {
-        generation++;
+        end();
         active = new WeakReference<>(editor);
     }
 
     public void end() {
         generation++;
         active.clear();
+        clearHistory();
     }
 
-    private static boolean canDispatch(InputConnection connection, EditorAction action) {
-        if (connection == null) return false;
-        if (action != EditorAction.COPY && action != EditorAction.CUT) return true;
-        CharSequence selection = connection.getSelectedText(0);
-        return selection != null && selection.length() > 0;
+    private void clearHistory() {
+        pendingOwnSelections.clear();
+        transaction = null;
+        localUndo = false;
+        original = pasted = null;
+        journalConnection.clear();
+    }
+
+    public void onSelectionUpdated(int start, int end, int candidateStart, int candidateEnd) {
+        if (transaction == null || dispatching) return;
+        Snapshot expected = transaction.undone ? original : pasted;
+        if (candidateStart >= 0 || candidateEnd >= 0) { clearHistory(); return; }
+        if (expected.start == start && expected.end == end) {
+            pendingOwnSelections.clear();
+            return;
+        }
+        // A late intermediate callback is tolerated only if it was emitted by our own
+        // replacement AND a fresh read proves the current editor is already at the final state.
+        for (int index = 0; index < pendingOwnSelections.size(); index++) {
+            int[] own = pendingOwnSelections.get(index);
+            if (own[0] != start || own[1] != end) continue;
+            Editor editor = active.get();
+            long expectedGeneration = generation;
+            try {
+                InputConnection connection = editor == null ? null : editor.connection();
+                Snapshot live = connection == null ? null : snapshot(connection);
+                if (connection != null && journalConnection.get() == connection
+                        && current(editor, connection, expectedGeneration) && expected.same(live)) {
+                    pendingOwnSelections.subList(0, index + 1).clear();
+                    return;
+                }
+            } catch (Throwable ignored) { /* Invalidated below. */ }
+            break;
+        }
+        clearHistory();
     }
 
     public boolean execute(EditorAction action) {
         Editor editor = active.get();
-        long expectedGeneration = generation;
-        if (editor == null || action == null) {
-            return false;
-        }
+        long expected = generation;
+        if (editor == null || action == null || dispatching) return false;
+        dispatching = true;
         try {
             InputConnection connection = editor.connection();
-            if (!canDispatch(connection, action)) {
-                return false;
+            if (connection == null) return false;
+            if (action == EditorAction.COPY || action == EditorAction.CUT) {
+                CharSequence selected = connection.getSelectedText(0);
+                if (selected == null || selected.length() == 0) return false;
             }
-            // A selection read can cross an editor callback. Never dispatch into a replaced session.
-            if (generation != expectedGeneration || active.get() != editor
-                    || editor.connection() != connection) {
-                return false;
+            if (!current(editor, connection, expected)) return false;
+            boolean needsSnapshot = transaction != null || action == EditorAction.PASTE
+                    || action == EditorAction.CUT || action == EditorAction.UNDO || action == EditorAction.REDO;
+            Snapshot before = needsSnapshot && editor.allowSnapshots() ? snapshot(connection) : null;
+            if (!current(editor, connection, expected)) return false;
+            if (transaction != null && (journalConnection.get() != connection || before == null
+                    || !transaction.matches(before.text.toString(), before.start, before.end)
+                    || !(transaction.undone ? original : pasted).same(before))) {
+                clearHistory();
             }
-            return connection.performContextMenuAction(action.contextMenuId);
+            boolean historyAction = action == EditorAction.UNDO || action == EditorAction.REDO;
+            if (historyAction) {
+                // Once this journal has undone a replacement, only redo that exact transaction.
+                if (transaction != null) {
+                    if ((action == EditorAction.UNDO) == transaction.undone) return false;
+                    return reverse(editor, connection, expected, before);
+                }
+                // Host-owned typing and external pastes stay with the host undo manager.
+                boolean accepted = connection.performContextMenuAction(action.contextMenuId);
+                Snapshot after = before == null ? null : snapshot(connection);
+                return current(editor, connection, expected) && (before == null ? accepted
+                        : after != null && !before.same(after));
+            }
+            if (action != EditorAction.COPY) clearHistory();
+            boolean accepted = connection.performContextMenuAction(action.contextMenuId);
+            if (before != null && (action == EditorAction.PASTE || action == EditorAction.CUT)) {
+                Snapshot after = snapshot(connection);
+                if (current(editor, connection, expected) && after != null) {
+                    transaction = EditorEditTransaction.capture(before.text.toString(),
+                            before.start, before.end, after.text.toString(), after.start, after.end);
+                    if (transaction != null) {
+                        original = before;
+                        pasted = after;
+                        journalConnection = new WeakReference<>(connection);
+                    }
+                }
+            }
+            return accepted;
         } catch (Throwable ignored) {
+            clearHistory();
             return false;
+        } finally {
+            dispatching = false;
+        }
+    }
+
+    private boolean reverse(Editor editor, InputConnection connection, long expected, Snapshot before) {
+        EditorEditTransaction edit = transaction;
+        Snapshot target = edit.undone ? pasted : original;
+        // Try the host first. Observe the result; true alone does not prove an edit occurred.
+        if (!localUndo) {
+            connection.performContextMenuAction(edit.undone ? android.R.id.redo : android.R.id.undo);
+        }
+        Snapshot observed = snapshot(connection);
+        if (!current(editor, connection, expected) || observed == null) {
+            clearHistory();
+            return false;
+        }
+        if (target.same(observed)) {
+            edit.undone = !edit.undone;
+            return true;
+        }
+        if (!before.same(observed)) {
+            // The host changed something else. Never apply another edit on top of that.
+            clearHistory();
+            return true;
+        }
+        // Only this exact known range may be replaced. Never rewrite the entire field.
+        int from = edit.offset;
+        int to = edit.undone ? Math.max(edit.selectionStart, edit.selectionEnd) : edit.insertedEnd;
+        CharSequence replacement = edit.undone
+                ? pasted.text.subSequence(from, edit.insertedEnd)
+                : original.text.subSequence(from, Math.max(edit.selectionStart, edit.selectionEnd));
+        pendingOwnSelections.clear();
+        boolean batch = false;
+        try {
+            connection.beginBatchEdit();
+            batch = true;
+            if (!current(editor, connection, expected) || !setOwnSelection(connection, from, to)
+                    || !current(editor, connection, expected)) {
+                clearHistory();
+                return false;
+            }
+            pendingOwnSelections.add(new int[] {from + replacement.length(), from + replacement.length()});
+            if (!connection.commitText(replacement, 1)) {
+                clearHistory();
+                return false;
+            }
+            if (!current(editor, connection, expected)
+                    || !setOwnSelection(connection, target.start, target.end)) {
+                clearHistory();
+                return false;
+            }
+        } finally {
+            if (batch) connection.endBatchEdit();
+        }
+        Snapshot result = snapshot(connection);
+        if (!current(editor, connection, expected) || result == null || !target.same(result)) {
+            clearHistory();
+            return false;
+        }
+        localUndo = true;
+        edit.undone = !edit.undone;
+        return true;
+    }
+
+    private boolean setOwnSelection(InputConnection connection, int start, int end) {
+        pendingOwnSelections.add(new int[] {start, end});
+        return connection.setSelection(start, end);
+    }
+
+    private boolean current(Editor editor, InputConnection connection, long expected) {
+        return generation == expected && active.get() == editor && editor.connection() == connection;
+    }
+
+    private static Snapshot snapshot(InputConnection connection) {
+        try { return readSnapshot(connection); }
+        catch (Throwable ignored) { return null; } // Optional extraction must not block native actions.
+    }
+
+    private static Snapshot readSnapshot(InputConnection connection) {
+        ExtractedTextRequest request = new ExtractedTextRequest();
+        request.hintMaxChars = EditorEditTransaction.MAX_CHARACTERS;
+        request.flags = InputConnection.GET_TEXT_WITH_STYLES;
+        ExtractedText value = connection.getExtractedText(request, 0);
+        if (value == null || value.text == null || value.startOffset != 0
+                || value.partialStartOffset != -1 || value.partialEndOffset != -1
+                || value.text.length() > EditorEditTransaction.MAX_CHARACTERS
+                || value.selectionStart < 0 || value.selectionEnd < 0
+                || value.selectionStart > value.text.length() || value.selectionEnd > value.text.length()) return null;
+        CharSequence frozen = value.text instanceof Spanned ? new SpannedString(value.text) : value.text.toString();
+        if (frozen.length() > EditorEditTransaction.MAX_CHARACTERS
+                || value.selectionStart > frozen.length() || value.selectionEnd > frozen.length()) return null;
+        Map<List<Object>, Integer> spanValues = StableEditorSpans.describe(frozen);
+        if (spanValues == null) return null;
+        return new Snapshot(frozen, value.selectionStart, value.selectionEnd, spanValues);
+    }
+
+    private static final class Snapshot {
+        final CharSequence text;
+        final int start, end;
+        final Map<List<Object>, Integer> spans;
+        Snapshot(CharSequence text, int start, int end, Map<List<Object>, Integer> spans) {
+            this.spans = spans;
+            this.text = text;
+            this.start = start;
+            this.end = end;
+        }
+        boolean same(Snapshot other) {
+            return other != null && start == other.start && end == other.end
+                    && text.toString().contentEquals(other.text)
+                    && spans.equals(other.spans);
         }
     }
 }

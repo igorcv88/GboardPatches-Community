@@ -42,11 +42,11 @@ public class GboardEditingAccessPointsSettingsFeatureTest {
         assertTrue(feature.isAvailable(context));
     }
 
-    @Test public void fiveSwitchesPersistAndPreviewIsAttachedToOverallSwitch() {
+    @Test public void sevenSwitchesPersistAndPreviewIsAttachedToOverallSwitch() {
         GboardPatchesSettingsContract.Screen screen = feature.buildScreen(host);
         assertEquals("Feature", screen.getSections().get(0).getTitle());
-        assertEquals("Add Select All, Copy, Cut and Paste to the menu.", screen.getHeaderSummary());
-        assertEquals(5, screen.getRows().size());
+        assertEquals("Add Select All, Copy, Cut, Paste, Undo and Redo to the menu. Local undo covers toolbar Paste/Cut in eligible text fields up to 32,768 UTF-16 units; clipboard-card and host paste depend on the app.", screen.getHeaderSummary());
+        assertEquals(7, screen.getRows().size());
         GboardPatchesSettingsContract.ToggleRow overall =
                 (GboardPatchesSettingsContract.ToggleRow) screen.getRows().get(0);
         assertTrue(overall.isChecked());
@@ -72,7 +72,7 @@ public class GboardEditingAccessPointsSettingsFeatureTest {
         preferences.edit().putString("pref_settings_ui_language", "zh-Hant").commit();
         GboardPatchesSettingsContract.Screen screen = feature.buildScreen(host);
         assertEquals("功能", screen.getSections().get(0).getTitle());
-        assertEquals("將全選、複製、剪下與貼上加入選單。", screen.getHeaderSummary());
+        assertEquals("將全選、複製、剪下、貼上、復原與重做加入選單。本機復原僅支援工具列貼上／剪下，限可讀取且不超過 32,768 個 UTF-16 單位的文字欄位；剪貼簿卡片與其他貼上由應用程式處理。", screen.getHeaderSummary());
         assertEquals("強制停止並重新啟動 Gboard 後生效", screen.getRows().get(0).getSummary());
         assertEquals(1, feature.buildScreen(null).getStatusBlocks().size());
     }

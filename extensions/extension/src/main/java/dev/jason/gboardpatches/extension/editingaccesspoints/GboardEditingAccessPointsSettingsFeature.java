@@ -83,6 +83,8 @@ public final class GboardEditingAccessPointsSettingsFeature
             case COPY -> R.string.gboard_edit_ap_copy;
             case CUT -> R.string.gboard_edit_ap_cut;
             case PASTE -> R.string.gboard_edit_ap_paste;
+            case UNDO -> R.string.gboard_edit_ap_undo;
+            case REDO -> R.string.gboard_edit_ap_redo;
         };
     }
 
