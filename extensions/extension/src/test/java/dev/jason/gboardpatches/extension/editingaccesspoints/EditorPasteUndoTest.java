@@ -125,6 +125,29 @@ public class EditorPasteUndoTest {
         h.onRead = () -> { throw new UnsupportedOperationException(); };
         assertTrue(s.execute(EditorAction.PASTE)); assertEquals(1,h.nativeCalls); assertEquals(0,h.commits);
     }
+    @Test public void lateOwnIntermediateSelectionKeepsRedoOnlyWithProvenFinalEditorState() {
+        Host h=new Host(); h.start=10;h.end=7;
+        EditorActionSession s=new EditorActionSession();s.begin(h);
+        s.execute(EditorAction.PASTE);s.execute(EditorAction.UNDO);
+        s.onSelectionUpdated(7,7+h.clip.length(),-1,-1); // Our recorded selection before inverse commit.
+        assertTrue(s.execute(EditorAction.REDO));
+    }
+    @Test public void superficiallyMatchingCallbackCannotHideAnExternalSelectionChange() {
+        Host h=new Host();h.start=10;h.end=7;
+        EditorActionSession s=new EditorActionSession();s.begin(h);
+        s.execute(EditorAction.PASTE);s.execute(EditorAction.UNDO);
+        h.start=h.end=1;
+        s.onSelectionUpdated(7,7+h.clip.length(),-1,-1);
+        h.start=10;h.end=7; // Coming back cannot recover the invalidated transaction.
+        int commits=h.commits; assertFalse(s.execute(EditorAction.REDO));assertEquals(commits,h.commits);
+    }
+    @Test public void largeEditorAndExternalClipboardPastesNeverEnterLocalJournal() {
+        Host h=new Host();h.text="x".repeat(32769);
+        EditorActionSession s=new EditorActionSession();s.begin(h);
+        s.execute(EditorAction.PASTE);s.execute(EditorAction.UNDO);assertEquals(0,h.commits);
+        h=new Host();s.begin(h);h.replace(h.clip); // Native clipboard card/host insertion, outside toolbar.
+        assertFalse(s.execute(EditorAction.UNDO));assertEquals(0,h.commits);
+    }
     @Test public void reentrantSnapshotCannotMutateOldField() {
         Host h = new Host(); EditorActionSession s = new EditorActionSession(); s.begin(h);
         h.onRead = s::end;

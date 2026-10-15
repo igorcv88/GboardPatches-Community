@@ -6,6 +6,9 @@ import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputConnection;
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 /** All calls run on the IME thread. Snapshots are bounded, transient and never logged. */
 public final class EditorActionSession {
@@ -21,6 +24,7 @@ public final class EditorActionSession {
     private Snapshot original, pasted;
     private boolean localUndo;
     private boolean dispatching;
+    private final List<int[]> pendingOwnSelections = new ArrayList<>();
 
     public void begin(Editor editor) {
         end();
@@ -34,6 +38,7 @@ public final class EditorActionSession {
     }
 
     private void clearHistory() {
+        pendingOwnSelections.clear();
         transaction = null;
         localUndo = false;
         original = pasted = null;
@@ -43,9 +48,30 @@ public final class EditorActionSession {
     public void onSelectionUpdated(int start, int end, int candidateStart, int candidateEnd) {
         if (transaction == null || dispatching) return;
         Snapshot expected = transaction.undone ? original : pasted;
-        if (candidateStart >= 0 || candidateEnd >= 0 || expected.start != start || expected.end != end) {
-            clearHistory();
+        if (candidateStart >= 0 || candidateEnd >= 0) { clearHistory(); return; }
+        if (expected.start == start && expected.end == end) {
+            pendingOwnSelections.clear();
+            return;
         }
+        // A late intermediate callback is tolerated only if it was emitted by our own
+        // replacement AND a fresh read proves the current editor is already at the final state.
+        for (int index = 0; index < pendingOwnSelections.size(); index++) {
+            int[] own = pendingOwnSelections.get(index);
+            if (own[0] != start || own[1] != end) continue;
+            Editor editor = active.get();
+            long expectedGeneration = generation;
+            try {
+                InputConnection connection = editor == null ? null : editor.connection();
+                Snapshot live = connection == null ? null : snapshot(connection);
+                if (connection != null && journalConnection.get() == connection
+                        && current(editor, connection, expectedGeneration) && expected.same(live)) {
+                    pendingOwnSelections.subList(0, index + 1).clear();
+                    return;
+                }
+            } catch (Throwable ignored) { /* Invalidated below. */ }
+            break;
+        }
+        clearHistory();
     }
 
     public boolean execute(EditorAction action) {
@@ -133,21 +159,23 @@ public final class EditorActionSession {
         CharSequence replacement = edit.undone
                 ? pasted.text.subSequence(from, edit.insertedEnd)
                 : original.text.subSequence(from, Math.max(edit.selectionStart, edit.selectionEnd));
+        pendingOwnSelections.clear();
         boolean batch = false;
         try {
             connection.beginBatchEdit();
             batch = true;
-            if (!current(editor, connection, expected) || !connection.setSelection(from, to)
+            if (!current(editor, connection, expected) || !setOwnSelection(connection, from, to)
                     || !current(editor, connection, expected)) {
                 clearHistory();
                 return false;
             }
+            pendingOwnSelections.add(new int[] {from + replacement.length(), from + replacement.length()});
             if (!connection.commitText(replacement, 1)) {
                 clearHistory();
                 return false;
             }
             if (!current(editor, connection, expected)
-                    || !connection.setSelection(target.start, target.end)) {
+                    || !setOwnSelection(connection, target.start, target.end)) {
                 clearHistory();
                 return false;
             }
@@ -162,6 +190,11 @@ public final class EditorActionSession {
         localUndo = true;
         edit.undone = !edit.undone;
         return true;
+    }
+
+    private boolean setOwnSelection(InputConnection connection, int start, int end) {
+        pendingOwnSelections.add(new int[] {start, end});
+        return connection.setSelection(start, end);
     }
 
     private boolean current(Editor editor, InputConnection connection, long expected) {
@@ -183,19 +216,20 @@ public final class EditorActionSession {
                 || value.text.length() > EditorEditTransaction.MAX_CHARACTERS
                 || value.selectionStart < 0 || value.selectionEnd < 0
                 || value.selectionStart > value.text.length() || value.selectionEnd > value.text.length()) return null;
-        if (value.text instanceof Spanned spans) {
-            for (Object span : spans.getSpans(0, spans.length(), Object.class)) {
-                if ((spans.getSpanFlags(span) & Spanned.SPAN_COMPOSING) != 0) return null;
-            }
-        }
-        return new Snapshot(value.text instanceof Spanned ? new SpannedString(value.text)
-                : value.text.toString(), value.selectionStart, value.selectionEnd);
+        CharSequence frozen = value.text instanceof Spanned ? new SpannedString(value.text) : value.text.toString();
+        if (frozen.length() > EditorEditTransaction.MAX_CHARACTERS
+                || value.selectionStart > frozen.length() || value.selectionEnd > frozen.length()) return null;
+        Map<List<Object>, Integer> spanValues = StableEditorSpans.describe(frozen);
+        if (spanValues == null) return null;
+        return new Snapshot(frozen, value.selectionStart, value.selectionEnd, spanValues);
     }
 
     private static final class Snapshot {
         final CharSequence text;
         final int start, end;
-        Snapshot(CharSequence text, int start, int end) {
+        final Map<List<Object>, Integer> spans;
+        Snapshot(CharSequence text, int start, int end, Map<List<Object>, Integer> spans) {
+            this.spans = spans;
             this.text = text;
             this.start = start;
             this.end = end;
@@ -203,8 +237,7 @@ public final class EditorActionSession {
         boolean same(Snapshot other) {
             return other != null && start == other.start && end == other.end
                     && text.toString().contentEquals(other.text)
-                    && (!(text instanceof Spanned) && !(other.text instanceof Spanned)
-                        || SpannedString.valueOf(text).equals(SpannedString.valueOf(other.text)));
+                    && spans.equals(other.spans);
         }
     }
 }

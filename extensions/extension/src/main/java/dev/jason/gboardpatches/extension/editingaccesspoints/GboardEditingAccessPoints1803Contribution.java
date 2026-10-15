@@ -62,7 +62,10 @@ public final class GboardEditingAccessPoints1803Contribution {
                     default -> icon(action);
                 };
                 // Reject missing/wrong resource types before admitting the descriptor.
-                if (icon == 0 || !"drawable".equals(context.getResources().getResourceTypeName(icon))) continue;
+                if (icon == 0 || !"drawable".equals(context.getResources().getResourceTypeName(icon))) {
+                    android.util.Log.w("GboardPatches", "Missing editing drawable: " + action.token);
+                    continue;
+                }
                 String label = label(action);
                 binding.register(controller, action, icon, label,
                         () -> GboardEditingAccessPointsRuntime.click(action));
