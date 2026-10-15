@@ -19,6 +19,8 @@ internal val gboardEditingAccessPointsLifecyclePatch = bytecodePatch(
     dependsOn(gboardPatchesExtensionCarrierPatch)
     execute {
         GboardEditingAccessPoints1803Targets.validate(this)
+        findMutableMethodOrThrow(GboardEditingAccessPoints1803Targets.selectionUpdated)
+            .applyEditingSelectionObserver()
         GboardEditingAccessPoints1803Targets.resetMethods.forEach { target ->
             findMutableMethodOrThrow(target).applyEditingSessionReset()
         }
@@ -39,4 +41,14 @@ internal fun MutableMethod.applyEditingSessionReset() {
         return
     }
     addInstructions(0, RuntimeCallEmitter.invoke(call, ""))
+}
+
+/** Range invocation consumes only the four Android callback parameters, without scratch locals. */
+internal fun MutableMethod.applyEditingSelectionObserver() {
+    val call = RuntimeCallId.EDITING_ACCESS_POINTS_SELECTION_UPDATED
+    val reference = RuntimeAbiCatalog.abi(call).reference
+    val instructions = implementation?.instructions ?: error("Missing selection implementation")
+    val existing = instructions.count { it.isMethodReference(reference) }
+    check(existing <= 1) { "Duplicate editing selection observer" }
+    if (existing == 0) addInstructions(0, RuntimeCallEmitter.invoke(call, "p3 .. p6"))
 }

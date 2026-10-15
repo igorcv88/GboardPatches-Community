@@ -9,6 +9,8 @@ import dev.jason.gboardpatches.patches.gboard.shared.mutableClass
 /** Reviewed target shape. No editor policy belongs in this version adapter. */
 internal object GboardEditingAccessPoints1803Targets {
     private const val OWNER = "Loup;"
+    // Same Android override already reviewed by GboardCalculator1803Targets.
+    val selectionUpdated = lifecycle("onUpdateSelection", "I", "I", "I", "I", "I", "I")
     val startView = lifecycle("onStartInputView", "Landroid/view/inputmethod/EditorInfo;", "Z")
     val resetMethods = listOf(
         startView,
@@ -41,7 +43,7 @@ internal object GboardEditingAccessPoints1803Targets {
         check(owner == "Landroid/inputmethodservice/InputMethodService;") {
             "Editing buttons lifecycle owner must extend InputMethodService"
         }
-        (descriptorMethods + resetMethods.map { it to false }).forEach { (target, isStatic) ->
+        (descriptorMethods + resetMethods.map { it to false } + listOf(selectionUpdated to false)).forEach { (target, isStatic) ->
             val method = target.resolve(context)
             check(AccessFlags.STATIC.isSet(method.accessFlags) == isStatic) {
                 "Unexpected static shape: ${target.reference}"

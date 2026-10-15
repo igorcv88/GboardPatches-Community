@@ -12,7 +12,7 @@ public class GboardEditingAccessPointsPolicyTest {
         List<String> stock = Arrays.asList("emoji", "web_search", "text_edit_copy", "emoji");
         List<String> actual = GboardEditingAccessPoints1803Contribution.extend(stock, action -> true);
         assertEquals(Arrays.asList("emoji", "web_search", "text_edit_copy",
-                "text_edit_select_all", "text_edit_cut", "text_edit_paste"), actual);
+                "text_edit_select_all", "text_edit_cut", "text_edit_paste", "text_edit_undo", "text_edit_redo"), actual);
         assertEquals(actual, GboardEditingAccessPoints1803Contribution.extend(actual, action -> true));
     }
 

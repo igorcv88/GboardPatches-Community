@@ -9,7 +9,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.function.Predicate;
 
-/** Four normal draggable APs, sharing the existing catalog/controller hook pair. */
+/** Six normal draggable APs, sharing the existing catalog/controller hook pair. */
 public final class GboardEditingAccessPoints1803Contribution {
     public static final GboardEditingAccessPoints1803Contribution INSTANCE =
             new GboardEditingAccessPoints1803Contribution();
@@ -55,9 +55,14 @@ public final class GboardEditingAccessPoints1803Contribution {
         Handles binding = handles;
         for (EditorAction action : EditorAction.values()) {
             if (GboardEditingAccessPointsRuntime.enabled(context, action)) {
-                int icon = icon(action);
+                int icon = switch (action) {
+                    case UNDO, REDO -> context.getResources().getIdentifier(
+                            "gboard_patches_" + action.name().toLowerCase(java.util.Locale.ROOT),
+                            "drawable", context.getPackageName());
+                    default -> icon(action);
+                };
                 // Reject missing/wrong resource types before admitting the descriptor.
-                if (!"drawable".equals(context.getResources().getResourceTypeName(icon))) continue;
+                if (icon == 0 || !"drawable".equals(context.getResources().getResourceTypeName(icon))) continue;
                 String label = label(action);
                 binding.register(controller, action, icon, label,
                         () -> GboardEditingAccessPointsRuntime.click(action));
@@ -71,6 +76,7 @@ public final class GboardEditingAccessPoints1803Contribution {
             case COPY -> 0x7f08044f;
             case CUT -> 0x7f080450;
             case PASTE -> 0x7f080452;
+            case UNDO, REDO -> 0; // Resolved by name after resource merge; never guess stock IDs.
         };
     }
 
@@ -81,6 +87,8 @@ public final class GboardEditingAccessPoints1803Contribution {
             case COPY -> "Copy";
             case CUT -> "Cut";
             case PASTE -> "Paste";
+            case UNDO -> "Undo";
+            case REDO -> "Redo";
         };
     }
 

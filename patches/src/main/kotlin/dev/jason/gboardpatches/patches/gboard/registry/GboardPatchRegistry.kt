@@ -206,8 +206,8 @@ val gboardManualIncognitoModePatch = gboardPublicResourcePatch(
 val gboardEditingAccessPointsPatch = gboardPublicResourcePatch(
     featureId = "editing_access_points",
     name = "Toolbar Editing Buttons",
-    description = "將全選、複製、剪下與貼上加入選單。\n" +
-        "Add Select All, Copy, Cut and Paste to the menu.",
+    description = "將全選、複製、剪下、貼上、復原與重做加入選單。\n" +
+        "Add Select All, Copy, Cut, Paste, Undo and Redo to the menu.",
     default = true,
 ) {
     compatibleWith(COMPATIBILITY_GBOARD)

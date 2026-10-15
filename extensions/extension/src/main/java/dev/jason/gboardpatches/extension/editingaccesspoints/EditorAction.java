@@ -5,7 +5,9 @@ public enum EditorAction {
     SELECT_ALL("text_edit_select_all", android.R.id.selectAll),
     COPY("text_edit_copy", android.R.id.copy),
     CUT("text_edit_cut", android.R.id.cut),
-    PASTE("text_edit_paste", android.R.id.paste);
+    PASTE("text_edit_paste", android.R.id.paste),
+    UNDO("text_edit_undo", android.R.id.undo),
+    REDO("text_edit_redo", android.R.id.redo);
 
     public final String token;
     public final int contextMenuId;

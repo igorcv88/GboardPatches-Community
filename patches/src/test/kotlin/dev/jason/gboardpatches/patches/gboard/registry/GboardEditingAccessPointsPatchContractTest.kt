@@ -28,6 +28,8 @@ class GboardEditingAccessPointsPatchContractTest {
     @Test fun editorAbiDoesNotExposeObfuscatedTypes() {
         assertEquals("(Ljava/lang/Object;)V",
             RuntimeAbiCatalog.abi(RuntimeCallId.EDITING_ACCESS_POINTS_START).descriptor)
+        assertEquals("(IIII)V",
+            RuntimeAbiCatalog.abi(RuntimeCallId.EDITING_ACCESS_POINTS_SELECTION_UPDATED).descriptor)
         assertEquals("()V",
             RuntimeAbiCatalog.abi(RuntimeCallId.EDITING_ACCESS_POINTS_END).descriptor)
     }
