@@ -5,6 +5,14 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      operation:
+        description: 'Release bundle, repair stable metadata, or publish existing theme previews'
+        type: choice
+        default: release
+        options:
+          - release
+          - repair-metadata
+          - theme-previews
       tag:
         description: 'Optional vMAJOR.MINOR.PATCH; empty increments the greatest version'
         required: false
@@ -14,10 +22,6 @@ on:
         required: false
         default: false
         type: boolean
-  push:
-    tags:
-      - 'v*'
-      - 'custom-theme-previews-v*'
 
 permissions:
   contents: write
@@ -29,7 +33,7 @@ concurrency:
 
 jobs:
   release:
-    if: ${{ !startsWith(github.ref_name, 'custom-theme-previews-') }}
+    if: ${{ inputs.operation == 'release' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -39,6 +43,7 @@ jobs:
       - name: Resolve version and check release identity
         env:
           EXPLICIT_TAG: ${{ inputs.tag }}
+          PRERELEASE: ${{ inputs.prerelease }}
           GH_TOKEN: ${{ github.token }}
           MORPHE_TOKEN: ${{ secrets.MORPHE_PACKAGES_TOKEN }}
         run: |
@@ -46,11 +51,15 @@ jobs:
           git tag -l > "$RUNNER_TEMP/tags"
           baseline=$(python3 -c 'import re; print(re.search(r"(?m)^version\s*=\s*(\S+)",open("gradle.properties").read()).group(1))')
           requested="$EXPLICIT_TAG"
-          if [ "$GITHUB_REF_TYPE" = tag ]; then requested="$GITHUB_REF_NAME"; fi
+          extra=()
+          if [ "$PRERELEASE" = true ]; then extra+=(--prerelease); fi
           python3 tools/release_bundle.py resolve --tags "$RUNNER_TEMP/tags" \
-            --baseline "$baseline" --tag "$requested" > "$RUNNER_TEMP/version"
+            --baseline "$baseline" --tag "$requested" "${extra[@]}" > "$RUNNER_TEMP/version"
           cat "$RUNNER_TEMP/version" >> "$GITHUB_ENV"
           . "$RUNNER_TEMP/version"
+          if [ "$PRERELEASE" != true ]; then
+            python3 tools/publish_source_metadata.py preflight "$GITHUB_REPOSITORY" "$VERSION"
+          fi
           # Refuse mismatched tags before paying for a build.
           if git show-ref --verify --quiet "refs/tags/$TAG"; then
             test "$(git rev-parse "$TAG^{commit}")" = "$GITHUB_SHA"
@@ -103,7 +112,7 @@ jobs:
           bash gradlew --build-cache -Pversion="$VERSION" \
             :extensions:extension:testDebugUnitTest \
             :extensions:calculator:testDebugUnitTest \
-            :patches:check :patches:buildAndroid generatePatchesList
+            :patches:check :patches:buildAndroid :patches:verifyReleaseBundleImport generatePatchesList
 
       - name: Validate and prepare versioned release files
         env:
@@ -111,7 +120,7 @@ jobs:
         run: |
           set -euo pipefail
           bundle="patches/build/libs/patches-$VERSION.mpp"
-          python3 tools/release_bundle.py validate "$bundle"
+          python3 tools/release_bundle.py validate "$bundle" --version "$VERSION" --repository "$GITHUB_REPOSITORY"
           mkdir -p release
           cp "$bundle" "release/patches-$VERSION.mpp"
           {
@@ -130,6 +139,9 @@ jobs:
           PRERELEASE: ${{ inputs.prerelease || false }}
         run: |
           set -euo pipefail
+          if [ "$PRERELEASE" != true ]; then
+            python3 tools/publish_source_metadata.py preflight "$GITHUB_REPOSITORY" "$VERSION"
+          fi
           # Fetch again after the build; never attach this bundle to another commit's tag.
           git fetch origin --tags
           if git show-ref --verify --quiet "refs/tags/$TAG"; then
@@ -139,7 +151,7 @@ jobs:
             git push origin "$GITHUB_SHA:refs/tags/$TAG"
           fi
           # Stage files in a draft before making the release visible to Morphe.
-          gh release create "$TAG" release/* --verify-tag --draft \
+          gh release create "$TAG" release/* --verify-tag --target "$GITHUB_SHA" --draft \
             --title "GboardPatches Community $VERSION" --notes-file release-notes.md
           if [ "$PRERELEASE" = true ]; then
             gh release edit "$TAG" --draft=false --prerelease --latest=false
@@ -151,10 +163,10 @@ jobs:
         if: ${{ !inputs.prerelease }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 tools/publish_source_metadata.py "$GITHUB_REPOSITORY" release/patches-bundle.json
+        run: python3 tools/publish_source_metadata.py publish "$GITHUB_REPOSITORY" release/patches-bundle.json
 
   theme-previews:
-    if: ${{ startsWith(github.ref_name, 'custom-theme-previews-v') }}
+    if: ${{ inputs.operation == 'theme-previews' }}
     name: Release preview bundle
     permissions:
       contents: write
@@ -162,12 +174,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Validate preview assets
         id: assets
         shell: pwsh
+        env:
+          PREVIEW_TAG: ${{ inputs.tag }}
         run: |
-          $tag = $env:GITHUB_REF_NAME
+          $tag = $env:PREVIEW_TAG
+          $target = git rev-parse "$tag^{commit}"
+          if ($LASTEXITCODE -ne 0 -or $target -ne $env:GITHUB_SHA) {
+              throw "Preview tag must point to this checked-out commit."
+          }
           $prefix = "custom-theme-previews-"
           if (-not $tag.StartsWith($prefix)) {
               throw "Unexpected preview release tag: $tag"
@@ -208,6 +228,7 @@ jobs:
               throw "Preview archive SHA-256 does not match manifest."
           }
 
+          "tag=$tag" >> $env:GITHUB_OUTPUT
           "archive=$archive" >> $env:GITHUB_OUTPUT
           "manifest=$manifestPath" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
@@ -215,10 +236,23 @@ jobs:
       - name: Publish preview release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ steps.assets.outputs.tag }}
           name: Custom Theme Previews ${{ steps.assets.outputs.version }}
           body: Theme preview bundle used by the Custom Theme patch. Actual theme packs are downloaded directly from Rboard PackRepoBeta.
           make_latest: false
           files: |
             ${{ steps.assets.outputs.archive }}
             ${{ steps.assets.outputs.manifest }}
+
+  repair-metadata:
+    if: ${{ inputs.operation == 'repair-metadata' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Repair only the metadata of an existing stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPAIR_TAG: ${{ inputs.tag }}
+        run: python3 tools/publish_source_metadata.py repair "$GITHUB_REPOSITORY" "$REPAIR_TAG"
