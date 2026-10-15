@@ -120,6 +120,11 @@ public class EditorPasteUndoTest {
         session.onSelectionUpdated(h.start,h.end,-1,-1);
         assertTrue(session.execute(EditorAction.UNDO));
     }
+    @Test public void unsupportedSnapshotDoesNotBlockNativePaste() {
+        Host h = new Host(); EditorActionSession s = new EditorActionSession(); s.begin(h);
+        h.onRead = () -> { throw new UnsupportedOperationException(); };
+        assertTrue(s.execute(EditorAction.PASTE)); assertEquals(1,h.nativeCalls); assertEquals(0,h.commits);
+    }
     @Test public void reentrantSnapshotCannotMutateOldField() {
         Host h = new Host(); EditorActionSession s = new EditorActionSession(); s.begin(h);
         h.onRead = s::end;

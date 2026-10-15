@@ -61,7 +61,9 @@ public final class EditorActionSession {
                 if (selected == null || selected.length() == 0) return false;
             }
             if (!current(editor, connection, expected)) return false;
-            Snapshot before = editor.allowSnapshots() ? snapshot(connection) : null;
+            boolean needsSnapshot = transaction != null || action == EditorAction.PASTE
+                    || action == EditorAction.CUT || action == EditorAction.UNDO || action == EditorAction.REDO;
+            Snapshot before = needsSnapshot && editor.allowSnapshots() ? snapshot(connection) : null;
             if (!current(editor, connection, expected)) return false;
             if (transaction != null && (journalConnection.get() != connection || before == null
                     || !transaction.matches(before.text.toString(), before.start, before.end)
@@ -81,7 +83,7 @@ public final class EditorActionSession {
                 return current(editor, connection, expected) && (before == null ? accepted
                         : after != null && !before.same(after));
             }
-            clearHistory();
+            if (action != EditorAction.COPY) clearHistory();
             boolean accepted = connection.performContextMenuAction(action.contextMenuId);
             if (before != null && (action == EditorAction.PASTE || action == EditorAction.CUT)) {
                 Snapshot after = snapshot(connection);
@@ -167,6 +169,11 @@ public final class EditorActionSession {
     }
 
     private static Snapshot snapshot(InputConnection connection) {
+        try { return readSnapshot(connection); }
+        catch (Throwable ignored) { return null; } // Optional extraction must not block native actions.
+    }
+
+    private static Snapshot readSnapshot(InputConnection connection) {
         ExtractedTextRequest request = new ExtractedTextRequest();
         request.hintMaxChars = EditorEditTransaction.MAX_CHARACTERS;
         request.flags = InputConnection.GET_TEXT_WITH_STYLES;

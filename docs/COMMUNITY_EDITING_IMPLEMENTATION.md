@@ -10,7 +10,7 @@ Snapshots are in memory only, at most 32,768 UTF-16 units per state. Styled subs
 
 ## Validation
 
-19 focused editing tests passed locally: existing session guards (6), replacement proof (3), and simulated editor Paste/Cut/Undo/Redo (10). These use the actual production session/transaction code and Android API classes on a JVM. The tests include acknowledged native no-ops, reversed selection, emojis, multiline text, session replacement, external edits and selection/composition invalidation. They are not device tests.
+20 focused editing tests passed locally: existing session guards (6), replacement proof (3), and simulated editor Paste/Cut/Undo/Redo (11). These use the actual production session/transaction code and Android API classes on a JVM. The tests include acknowledged native no-ops, reversed selection, emojis, multiline text, session replacement, external edits and selection/composition invalidation. They are not device tests.
 
 Full Gradle build and Robolectric settings tests remain unverified locally. Gradle 9.6.1 downloaded successfully after configuring the environment proxy, but plugin `app.morphe.patches:1.3.3` could not be resolved; the private Morphe package-registry credentials and Android build toolchain are absent here. No release workflow was dispatched.
 
