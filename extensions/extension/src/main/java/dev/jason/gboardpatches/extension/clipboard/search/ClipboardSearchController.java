@@ -32,6 +32,16 @@ public final class ClipboardSearchController implements AutoCloseable {
     private ScheduledFuture<?> pending;
     private boolean closed;
 
+    /** Production panel adapters must use this factory; tests may inject an executor. */
+    public static ClipboardSearchController forImeMainThread() {
+        android.os.Looper main = android.os.Looper.getMainLooper();
+        if (android.os.Looper.myLooper() != main) {
+            throw new IllegalStateException("Clipboard panel must attach on the IME main thread");
+        }
+        android.os.Handler handler = new android.os.Handler(main);
+        return new ClipboardSearchController(command -> handler.post(command));
+    }
+
     public ClipboardSearchController(Executor ui) {
         this.ui = ui;
         worker = new ScheduledThreadPoolExecutor(1, runnable -> {

@@ -20,6 +20,16 @@ public class ClipboardSearchMatcherTest {
         assertTrue(new ClipboardSearchMatcher(null).empty());
         assertTrue(new ClipboardSearchMatcher(" ").matches("", () -> false));
     }
+    @Test public void greekSigmaAndCaselessExpansionsDoNotDependOnChunkAlignment() {
+        for (int offset : new int[]{0,2046,2047,2048,4095}) {
+            for(String word:new String[]{"ΟΣ ","ος ","οσ "}) {
+                assertTrue(new ClipboardSearchMatcher("ΟΣ").matches("x".repeat(offset)+word,()->false));
+                assertTrue(new ClipboardSearchMatcher("ος").matches("x".repeat(offset)+word,()->false));
+            }
+            assertTrue(new ClipboardSearchMatcher("straße").matches("x".repeat(offset)+"STRASSE",()->false));
+            assertTrue(new ClipboardSearchMatcher("cafe").matches("x".repeat(offset)+"cafe\u0301",()->false));
+        }
+    }
     @Test public void queryIsBoundedAndRepeatedTermsDoNotBlock() {
         assertTrue(new ClipboardSearchMatcher("a a").matches("a", () -> false));
         assertTrue(new ClipboardSearchMatcher("a".repeat(300)).matches("a".repeat(256), () -> false));

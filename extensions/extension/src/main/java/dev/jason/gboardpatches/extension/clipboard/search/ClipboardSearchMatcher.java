@@ -57,8 +57,9 @@ public final class ClipboardSearchMatcher {
     }
 
     private static String normalize(String text) {
-        String decomposed = Normalizer.normalize(text, Normalizer.Form.NFKD)
-                .toUpperCase(Locale.ROOT).toLowerCase(Locale.ROOT);
+        // ROOT uppercase has no final-sigma contextual rule. Use the same caseless key
+        // for query/chunks, retaining full expansions such as sharp s -> SS.
+        String decomposed = Normalizer.normalize(text, Normalizer.Form.NFKD).toUpperCase(Locale.ROOT);
         StringBuilder result = new StringBuilder(decomposed.length());
         decomposed.codePoints().forEach(cp -> {
             int type = Character.getType(cp);
