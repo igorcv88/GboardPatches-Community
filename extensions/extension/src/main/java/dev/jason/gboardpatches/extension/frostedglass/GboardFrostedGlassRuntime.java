@@ -100,7 +100,14 @@ public final class GboardFrostedGlassRuntime {
         if (decor != null) {
             State state = stateFor(window);
             installDecorLayoutObserver(window, service, decor, state);
-            scheduleApply(window, service);
+            // This delegate runs at entry to Gboard's onWindowShown. Defer surface
+            // discovery until stock initialization has created its keyboard root.
+            decor.post(() -> {
+                if (state.active && GboardFrostedGlassSettingsRuntime.isEnabled()
+                        && canUseBackgroundBlur(service)) {
+                    scheduleApply(window, service);
+                }
+            });
         } else {
             onConfigureWindow(receiver, false, false);
         }
