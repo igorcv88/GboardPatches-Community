@@ -108,7 +108,8 @@ private fun gboardPublicResourcePatch(
     description: String,
     default: Boolean,
     block: ResourcePatchBuilder.() -> Unit,
-) = GboardTargetAdmission.admittedContributions(featureId).let { admitted ->
+) = GboardTargetAdmission.admittedContributions(featureId)
+    .takeIf { CommunityPatchPolicy.publishes(featureId) }.orEmpty().let { admitted ->
     resourcePatch(
         name = name.takeIf { admitted.isNotEmpty() },
         description = description,

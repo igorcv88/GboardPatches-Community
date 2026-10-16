@@ -65,7 +65,7 @@ class GboardPortProductCatalogContractTest {
             features.map { feature -> feature["feature_id"].asString }.sorted(),
             features.map { feature -> feature["feature_id"].asString },
         )
-        assertMatchesPublishedRegistrationCount(features.size)
+        assertMatchesPublishedRegistrationCount(features.count { CommunityPatchPolicy.publishes(it["feature_id"].asString) })
         assertEquals(features.size, features.map { it["feature_id"].asString }.distinct().size)
         assertEquals(features.size, features.map { it["public_patch_name"].asString }.distinct().size)
 
@@ -387,6 +387,7 @@ class GboardPortProductCatalogContractTest {
                 markerSource.contains("\"$marker\""),
             )
 
+            if (!CommunityPatchPolicy.publishes(feature["feature_id"].asString)) return@forEach
             val publicPatch = registrations.single {
                 it.name == feature["public_patch_name"].asString
             }
@@ -464,6 +465,7 @@ class GboardPortProductCatalogContractTest {
                 )
             }
 
+            if (!CommunityPatchPolicy.publishes(feature["feature_id"].asString)) return@forEach
             val publicPatch = registrations.single {
                 it.name == feature["public_patch_name"].asString
             }
@@ -484,7 +486,9 @@ class GboardPortProductCatalogContractTest {
         val registrations = GboardPublishedPatchCatalog.morpheRegistrations
         val publishedNames = registrations.mapNotNull { patch -> patch.name }.toSet()
 
-        assertEquals(publishedNames, byPatchName.keys)
+        assertEquals(publishedNames, features.filter { feature ->
+            CommunityPatchPolicy.publishes(feature["feature_id"].asString)
+        }.map { it["public_patch_name"].asString }.toSet())
         registrations.forEach { patch ->
             val feature = byPatchName.getValue(patch.name!!)
             val expectedDependencies = feature.getAsJsonArray("depends_on_feature_ids")

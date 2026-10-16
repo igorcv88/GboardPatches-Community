@@ -47,7 +47,6 @@ class GboardDeveloperOptionsGeneratedInventoryTest {
             "Advanced Voice Typing",
             "Clipboard Enhancements",
             "Clipboard Custom Character Limit",
-            "Custom Symbols",
             "Developer options",
             "Emojis, stickers & GIFs Tab Order",
             "Enable Inline Autofill Suggestions",
@@ -62,9 +61,6 @@ class GboardDeveloperOptionsGeneratedInventoryTest {
             "Swipeable Custom Top Row",
             "Use Bluetooth Microphone",
             "Web Clipboard",
-            "Zhuyin Bottom Row Key Sizes",
-            "Zhuyin Quick Traditional/Simplified Toggle",
-            "Zhuyin Slide Input",
         )
     }
 }
