@@ -11,11 +11,11 @@ public class ClipboardSearchBenchmark {
         for(int i=0;i<500;i++) clips.add(prefix+String.format("%010d",i));
         double[] times=new double[5];
         int matches=0;
-        for(int sample=-3;sample<times.length;sample++) {
+        for(int sample=0;sample<times.length;sample++) {
             ClipboardSearchMatcher matcher=new ClipboardSearchMatcher("absent-query");
             long start=System.nanoTime();
             for(String clip:clips) if(matcher.matches(clip,()->false)) matches++;
-            if (sample >= 0) times[sample]=(System.nanoTime()-start)/1e6;
+            times[sample]=(System.nanoTime()-start)/1e6;
         }
         Arrays.sort(times);
         System.out.printf(java.util.Locale.ROOT,
