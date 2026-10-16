@@ -37,7 +37,10 @@ class GboardCompatibilitySourceTest {
                     .containsMatchIn(block)
             }
 
-        assertMatchesPublishedRegistrationCount(publicPatchBlocks.size)
+        assertMatchesPublishedRegistrationCount(publicPatchBlocks.count { block ->
+            val featureId = Regex("""featureId\s*=\s*"([^"]+)"""").find(block)!!.groupValues[1]
+            CommunityPatchPolicy.publishes(featureId)
+        })
         publicPatchBlocks.forEach { block ->
             assertEquals(
                 1,
