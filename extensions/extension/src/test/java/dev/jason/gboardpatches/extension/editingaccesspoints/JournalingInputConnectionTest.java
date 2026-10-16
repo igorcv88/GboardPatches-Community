@@ -134,6 +134,63 @@ public class JournalingInputConnectionTest {
         assertEquals(1, editor.hostUndo);
     }
 
+    @Test public void wrapperEqualsItsEditorConnection() {
+        FakeEditor editor = new FakeEditor();
+        InputConnection wrapped = JournalingInputConnection.wrap(editor.connection);
+        // Loup.az(): Objects.equals(getCurrentInputConnection(), binding.getConnection()).
+        assertTrue(java.util.Objects.equals(wrapped, editor.connection));
+        assertEquals(editor.connection.hashCode(), wrapped.hashCode());
+        assertFalse(wrapped.equals(new FakeEditor().connection));
+    }
+
+    /** Mirrors Loup.az() (0x2f01e4): returns !Objects.equals(current, binding.getConnection()). */
+    private static boolean realEditorBound(InputConnection current, InputConnection binding) {
+        return !java.util.Objects.equals(current, binding);
+    }
+
+    @Test public void loupAzKeepsDummyAndRealConnectionSemantics() {
+        FakeEditor dummy = new FakeEditor(), editor = new FakeEditor();
+        // No editor started: IMS returns the binding's own (dummy) connection.
+        assertFalse(realEditorBound(JournalingInputConnection.wrap(dummy.connection), dummy.connection));
+        // Editor started: current connection differs from the binding connection.
+        assertTrue(realEditorBound(JournalingInputConnection.wrap(editor.connection), dummy.connection));
+    }
+
+    @Test public void composingRunCostsOneSnapshotPair() {
+        EditorActionSession session = new EditorActionSession();
+        FakeEditor editor = setUp(session);
+        JournalingInputConnection.drainCounters();
+        int[] reads = {0};
+        JournalingInputConnection.setReader(connection -> { reads[0]++; return editor.state(); });
+        InputConnection keyboard = JournalingInputConnection.wrap(editor.connection);
+        for (String partial : new String[] {"p", "pa", "pal", "pala", "palav", "palavr", "palavra"}) {
+            keyboard.beginBatchEdit();
+            keyboard.setComposingText(partial, 1);
+            keyboard.endBatchEdit();
+        }
+        assertEquals(1, reads[0]);
+        keyboard.commitText("palavra ", 1);
+        assertEquals(2, reads[0]);
+        String counters = JournalingInputConnection.drainCounters();
+        assertTrue(counters, counters.startsWith("commit=1 compose=7 delete=0"));
+        assertTrue(counters, counters.endsWith("snapshots=2"));
+        assertNull(JournalingInputConnection.drainCounters());
+        assertTrue(session.execute(EditorAction.UNDO));
+        assertEquals("", editor.text.toString());
+    }
+
+    @Test public void undoWhileComposingSealsTheRunFirst() {
+        EditorActionSession session = new EditorActionSession();
+        FakeEditor editor = setUp(session);
+        InputConnection keyboard = JournalingInputConnection.wrap(editor.connection);
+        keyboard.commitText("ok ", 1);
+        keyboard.setComposingText("wor", 1);
+        assertTrue(session.execute(EditorAction.UNDO));
+        assertEquals("ok ", editor.text.toString());
+        assertTrue(session.execute(EditorAction.UNDO));
+        assertEquals("", editor.text.toString());
+    }
+
     @Test public void reversalIsNotRecordedAsKeyboardEdit() {
         EditorActionSession session = new EditorActionSession();
         FakeEditor editor = setUp(session);

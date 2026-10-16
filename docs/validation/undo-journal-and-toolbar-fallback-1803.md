@@ -44,3 +44,16 @@ Exige três bindings que só podem ser obtidos do APK 18.0.3: (1) a chamada que 
 - Executado localmente com JDK 21 contra `android.jar` (API 34) e shims mínimos para `InputConnectionWrapper`, `Looper`, `Log`, `SystemClock` e o runner do Robolectric: `ImeEditJournalTest` (9), `JournalingInputConnectionTest` (6), `EditorActionSessionTest` existente, `QuickToolbar1803FallbackTest` (5) — todos passaram.
 - `./gradlew` não resolve `app.morphe.patches:1.3.3` sem credencial do GitHub Packages; build Kotlin, Robolectric real, transformação do APK e `.mpp` **não** foram executados aqui. O patch Kotlin não foi compilado nesta sessão.
 - Nenhum teste em aparelho. Critérios pendentes no S25 Ultra: Undo/Redo em ChatGPT, campos EditText comuns, navegadores e Termux; toolbar não abrindo o painel completo durante digitação; log `Undo journal inactive` ausente.
+
+## Atualização após o relatório binário dirigido (16/10/2026)
+
+- Confirmado no APK: `Loup;` (151 métodos) não declara `getCurrentInputConnection()`; o override é inserido. `Loqe.d()`, `Lopx.n()` e `Lfio` consultam `Loqa.getCurrentInputConnection()`; para o objeto `Loup` isso despacha para o override.
+- `Loup.az()` compara `getCurrentInputConnection()` com `InputBinding.getConnection()` via `Objects.equals`. O wrapper agora é igual à conexão original (`equals`/`hashCode` delegados). Isso só cobre a ordem `Objects.equals(wrapper, raw)`; a ordem exata está pendente (pergunta abaixo).
+- Custo: durante a composição de uma palavra, `setComposingText` não faz leitura; um par de snapshots por palavra (base ao iniciar, resultado ao confirmar/finalizar/interromper). Undo/Redo fecham a composição aberta antes de ler o editor. Limite: uma alteração externa durante a composição de uma palavra é atribuída a essa palavra.
+- Contadores para validação no aparelho, ao fim de cada sessão de entrada: `adb logcat -s GboardPatches` mostra `Undo journal session: commit=… compose=… delete=… keyDown=… correction=… snapshots=…`. Só números. Se ChatGPT/EditText mostram contadores zerados durante a digitação, o Gboard não está passando pelo wrapper naquele caminho.
+
+### `Loup.az()` — respondido (extração binária de 16/10/2026)
+
+`az()` retorna `!Objects.equals(getCurrentInputConnection(), InputBinding.getConnection())`, nessa ordem. Significa "há editor real ligado": quando a conexão atual é a própria conexão do binding (dummy), `onStartInputView` registra `Dummy InputConnection bound` e, se `Loup.H()`, chama `requestHideSelf(0)`. `onStartInput` repassa o resultado a `Loup.v(EditorInfo,ZZ)`.
+
+**Regressão no `main` (PR #15):** sem `equals`, o wrapper nunca é igual à conexão do binding, então `az()` passa a retornar sempre `true` e o caminho de conexão dummy (inclusive a ocultação) deixa de existir. O `equals` deste PR restaura a semântica original para a ordem usada (`Objects.equals(wrapper, raw)`), coberta por `loupAzKeepsDummyAndRealConnectionSemantics`. **Não publicar release a partir do `main` sem este PR.**

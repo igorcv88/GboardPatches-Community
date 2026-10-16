@@ -87,6 +87,10 @@ public final class GboardEditingAccessPointsRuntime {
     }
 
     public static void end() {
+        try {
+            String counters = JournalingInputConnection.drainCounters();
+            if (counters != null) android.util.Log.i("GboardPatches", "Undo journal session: " + counters);
+        } catch (Throwable ignored) { }
         JournalingInputConnection.setPolicy(null);
         JournalingInputConnection.resetAll();
         dev.jason.gboardpatches.extension.quicktoolbar.QuickToolbar1803Runtime.reset();

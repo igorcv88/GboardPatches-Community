@@ -27,11 +27,16 @@ public final class JournalingInputConnection extends InputConnectionWrapper {
     private static final Map<InputConnection, JournalingInputConnection> WRAPPERS = new WeakHashMap<>();
     private static volatile BooleanSupplier policy = () -> false;
     private static volatile Reader reader = JournalingInputConnection::readState;
+    /** Device validation counters: call kinds and snapshot reads only, never text. */
+    static final java.util.concurrent.atomic.AtomicIntegerArray COUNTS = new java.util.concurrent.atomic.AtomicIntegerArray(6);
+    static final int COMMIT = 0, COMPOSE = 1, DELETE = 2, KEY = 3, READ = 4, CORRECTION = 5;
 
     final InputConnection raw;
     final ImeEditJournal journal = new ImeEditJournal();
     private int batchDepth;
     private boolean recording;
+    /** An open composing run: one snapshot pair per run, not per composing keystroke. */
+    private boolean composing;
 
     private JournalingInputConnection(InputConnection raw) {
         super(raw, false);
@@ -73,25 +78,54 @@ public final class JournalingInputConnection extends InputConnectionWrapper {
         }
     }
 
-    synchronized void reset() { journal.clear(); batchDepth = 0; recording = false; }
+    synchronized void reset() { journal.clear(); batchDepth = 0; recording = false; composing = false; }
 
-    synchronized ImeEditJournal.State state() { return reader.read(raw); }
+    /** Closes an open composing run so the journal reflects the editor before Undo/Redo. */
+    synchronized void seal() {
+        if (!composing) return;
+        composing = false;
+        after();
+    }
+
+    /**
+     * Loup.az() compares getCurrentInputConnection() with InputBinding.getConnection() through
+     * Objects.equals. The wrapper is the same editor connection, so it must compare equal to it.
+     */
+    @Override public boolean equals(Object other) { return other == this || other == raw; }
+    @Override public int hashCode() { return raw.hashCode(); }
+
+    synchronized ImeEditJournal.State state() { return read(); }
+
+    private ImeEditJournal.State read() {
+        COUNTS.incrementAndGet(READ);
+        return reader.read(raw);
+    }
+
+    /** One line per input session when the wrapper saw keyboard edits; resets the counters. */
+    public static String drainCounters() {
+        int commits = COUNTS.getAndSet(COMMIT, 0), composes = COUNTS.getAndSet(COMPOSE, 0),
+                deletes = COUNTS.getAndSet(DELETE, 0), keys = COUNTS.getAndSet(KEY, 0),
+                reads = COUNTS.getAndSet(READ, 0), corrections = COUNTS.getAndSet(CORRECTION, 0);
+        if (commits + composes + deletes + keys + corrections == 0) return null;
+        return "commit=" + commits + " compose=" + composes + " delete=" + deletes
+                + " keyDown=" + keys + " correction=" + corrections + " snapshots=" + reads;
+    }
 
     // ---- recording ----
 
     private synchronized void before() {
-        if (batchDepth > 0 && recording) return;
+        if (recording && (batchDepth > 0 || composing)) return; // Base already captured.
         boolean allowed;
         try { allowed = policy.getAsBoolean(); } catch (Throwable ignored) { allowed = false; }
         if (!allowed) { journal.clear(); recording = false; return; }
         recording = true;
-        journal.beforeEdit(reader.read(raw));
+        journal.beforeEdit(read());
     }
 
     private synchronized void after() {
-        if (!recording || batchDepth > 0) return;
+        if (!recording || batchDepth > 0 || composing) return;
         recording = false;
-        journal.afterEdit(reader.read(raw), SystemClock.uptimeMillis());
+        journal.afterEdit(read(), SystemClock.uptimeMillis());
     }
 
     @Override public boolean beginBatchEdit() {
@@ -108,33 +142,63 @@ public final class JournalingInputConnection extends InputConnectionWrapper {
         return result;
     }
 
-    @Override public boolean commitText(CharSequence text, int newCursorPosition) {
+    /** Before a mutation that ends any composing run; the run's base snapshot stays the base. */
+    private synchronized void beforeFinal() {
         before();
+        composing = false;
+    }
+
+    @Override public boolean commitText(CharSequence text, int newCursorPosition) {
+        COUNTS.incrementAndGet(COMMIT);
+        beforeFinal();
         try { return super.commitText(text, newCursorPosition); } finally { after(); }
     }
 
     @Override public boolean setComposingText(CharSequence text, int newCursorPosition) {
-        before();
-        try { return super.setComposingText(text, newCursorPosition); } finally { after(); }
+        COUNTS.incrementAndGet(COMPOSE);
+        synchronized (this) {
+            // Intermediate composing updates of one word cost no IPC: the run is diffed once,
+            // when it is committed, finished, or interrupted. External edits while a word is
+            // being composed are attributed to the run (documented limitation).
+            if (!composing) {
+                before();
+                composing = recording;
+            }
+        }
+        return super.setComposingText(text, newCursorPosition);
+    }
+
+    @Override public boolean finishComposingText() {
+        boolean result = super.finishComposingText();
+        seal();
+        return result;
+    }
+
+    @Override public boolean setComposingRegion(int start, int end) {
+        seal();
+        return super.setComposingRegion(start, end);
     }
 
     @Override public boolean deleteSurroundingText(int beforeLength, int afterLength) {
-        before();
+        COUNTS.incrementAndGet(DELETE);
+        beforeFinal();
         try { return super.deleteSurroundingText(beforeLength, afterLength); } finally { after(); }
     }
 
     @Override public boolean deleteSurroundingTextInCodePoints(int beforeLength, int afterLength) {
-        before();
+        COUNTS.incrementAndGet(DELETE);
+        beforeFinal();
         try { return super.deleteSurroundingTextInCodePoints(beforeLength, afterLength); } finally { after(); }
     }
 
     @Override public boolean commitCompletion(CompletionInfo text) {
-        before();
+        beforeFinal();
         try { return super.commitCompletion(text); } finally { after(); }
     }
 
     @Override public boolean commitCorrection(CorrectionInfo info) {
-        before();
+        COUNTS.incrementAndGet(CORRECTION);
+        beforeFinal();
         try { return super.commitCorrection(info); } finally { after(); }
     }
 
@@ -142,18 +206,19 @@ public final class JournalingInputConnection extends InputConnectionWrapper {
         // DEL/FORWARD_DEL/ENTER key events edit text on ACTION_DOWN in apps that ignore
         // deleteSurroundingText. Bracket the down event; the up event never edits.
         if (event == null || event.getAction() != KeyEvent.ACTION_DOWN) return super.sendKeyEvent(event);
-        before();
+        COUNTS.incrementAndGet(KEY);
+        beforeFinal();
         try { return super.sendKeyEvent(event); } finally { after(); }
     }
 
     @Override public boolean setSelection(int start, int end) {
-        synchronized (this) { journal.breakGroup(); }
+        synchronized (this) { seal(); journal.breakGroup(); }
         return super.setSelection(start, end);
     }
 
     @Override public boolean performContextMenuAction(int id) {
         // Host paste/cut/undo change text outside this journal; the next snapshot proves it.
-        synchronized (this) { journal.breakGroup(); }
+        synchronized (this) { seal(); journal.breakGroup(); }
         return super.performContextMenuAction(id);
     }
 
