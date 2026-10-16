@@ -21,3 +21,28 @@ class ImeFramestatsTest(unittest.TestCase):
         result=module.analyze(sample)
         self.assertEqual(1,result['durations_ms']['intended_to_completed']['n'])
         self.assertEqual(0,result['durations_ms']['frame_start_to_sync_start']['n'])
+
+    def test_zero_frames_have_no_reported_jank_percent(self):
+        empty = module.analyze('Total frames rendered: 0\nJanky frames: 0\n')
+        self.assertEqual(0, empty['reported_frames'])
+        self.assertIsNone(empty['reported_jank_percent'])
+
+    def test_comparison_with_zero_frames_outputs_null_delta(self):
+        import contextlib
+        import io
+        import json
+        import sys
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            current = Path(directory) / 'current.txt'
+            baseline = Path(directory) / 'baseline.txt'
+            current.write_text('Total frames rendered: 0\nJanky frames: 0\n')
+            baseline.write_text('Total frames rendered: 2\nJanky frames: 1\n')
+            output = io.StringIO()
+            with patch.object(sys, 'argv', ['analyze_ime_framestats.py', str(current), '--compare', str(baseline)]):
+                with contextlib.redirect_stdout(output):
+                    module.main()
+            result = json.loads(output.getvalue())
+            self.assertIsNone(result['comparison']['jank_delta_percentage_points'])
+
