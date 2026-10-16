@@ -57,6 +57,11 @@ public final class ClipboardSearchMatcher {
     }
 
     private static String normalize(String text) {
+        boolean ascii = true;
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) > 0x7f) { ascii = false; break; }
+        }
+        if (ascii) return text.toUpperCase(Locale.ROOT);
         // ROOT uppercase has no final-sigma contextual rule. Use the same caseless key
         // for query/chunks, retaining full expansions such as sharp s -> SS.
         String decomposed = Normalizer.normalize(text, Normalizer.Form.NFKD).toUpperCase(Locale.ROOT);

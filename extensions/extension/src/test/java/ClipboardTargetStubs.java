@@ -100,6 +100,12 @@ class fij {
 }
 
 class fih {
+    public fih(long id, String text, boolean sensitive) {
+        this(id, new j$.time.Instant(0L), 0, false, false, sensitive);
+        g.c = text;
+    }
+    public String i() { return g.c; }
+
     public static final fih a = new fih(-1L, new j$.time.Instant(0L), 0, false, false);
     public static final fih b = new fih(-2L, new j$.time.Instant(0L), 0, false, false);
     public static final fih c = new fih(-3L, new j$.time.Instant(0L), 2, false, true);
