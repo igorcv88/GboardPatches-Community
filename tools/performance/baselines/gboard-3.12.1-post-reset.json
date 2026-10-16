@@ -1,0 +1,67 @@
+{
+  "reported_frames": 132,
+  "reported_janky_frames": 85,
+  "reported_jank_percent": 64.3939,
+  "reported_duration_percentiles_ms": {
+    "50": 32,
+    "90": 61,
+    "95": 81,
+    "99": 89
+  },
+  "csv_rows": 120,
+  "csv_normal_rows": 89,
+  "sha256": "922050f09c3f5aeacc4cb1c9469f001769ecb93a52835c8eee6f2b73bc2abc17",
+  "gpu_4950ms_bucket_anomalous": true,
+  "durations_ms": {
+    "intended_to_completed": {
+      "n": 120,
+      "p50": 33.199,
+      "p90": 87.9163,
+      "p95": 111.6389,
+      "p99": 118.4626
+    },
+    "frame_start_to_sync_start": {
+      "n": 120,
+      "p50": 2.1154,
+      "p90": 27.8141,
+      "p95": 28.6563,
+      "p99": 29.8745
+    },
+    "ui_until_sync_queued": {
+      "n": 120,
+      "p50": 0.3977,
+      "p90": 2.1266,
+      "p95": 2.9433,
+      "p99": 6.9019
+    },
+    "issue_to_swap": {
+      "n": 120,
+      "p50": 1.0959,
+      "p90": 1.6017,
+      "p95": 2.3114,
+      "p99": 4.5847
+    },
+    "QueueBufferDuration": {
+      "n": 120,
+      "p50": 0.2796,
+      "p90": 28.999,
+      "p95": 30.6351,
+      "p99": 44.5004
+    },
+    "DequeueBufferDuration": {
+      "n": 120,
+      "p50": 0.0059,
+      "p90": 0.0125,
+      "p95": 0.0154,
+      "p99": 0.0668
+    },
+    "FrameInterval": {
+      "n": 120,
+      "p50": 8.3234,
+      "p90": 8.3333,
+      "p95": 8.3333,
+      "p99": 8.3333
+    }
+  },
+  "interpretation": "Queue and sync intervals include waiting/backpressure; they do not isolate GPU execution. Device A/B and Perfetto remain required."
+}
