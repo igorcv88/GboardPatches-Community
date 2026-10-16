@@ -43,8 +43,10 @@ public final class ClipboardNativeSearchSession {
             if (!surface) return rollback();
             alphabet = host.switchToAlphabet();
             if (!alphabet) return rollback();
-            routed = host.routeToField();
-            if (!routed) return rollback();
+            // A failed or throwing route may already have switched the provider (Loup.aC calls
+            // Loqe.n before its later branches), so a route attempt is always restored.
+            routed = true;
+            if (!host.routeToField()) return rollback();
         } catch (Throwable failure) {
             return rollback();
         }

@@ -59,8 +59,8 @@ public class ClipboardNativeSearchSessionTest {
         Object[][] cases = {
             {"surface-false", List.of("surface")},
             {"alphabet-false", List.of("surface", "alphabet", "hide")},
-            {"route-false", List.of("surface", "alphabet", "route", "hide", "clipboard")},
-            {"route", List.of("surface", "alphabet", "route", "hide", "clipboard")},
+            {"route-false", List.of("surface", "alphabet", "route", "restore", "hide", "clipboard")},
+            {"route", List.of("surface", "alphabet", "route", "restore", "hide", "clipboard")},
             {"alphabet", List.of("surface", "alphabet", "hide")},
         };
         for (Object[] c : cases) {

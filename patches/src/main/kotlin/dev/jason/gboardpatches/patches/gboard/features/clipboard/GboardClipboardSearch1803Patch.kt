@@ -45,5 +45,44 @@ internal val gboardClipboardSearch1803Patch = bytecodePatch(
             check(existing <= 1) { "Duplicate clipboard search session end in $name" }
             if (existing == 0) method.addInstructions(0, RuntimeCallEmitter.invoke(end, ""))
         }
+        // Loup declares onKeyDown/onKeyUp (0x4db8a0 / 0x4dbb1c): Back first closes an open search.
+        val back = RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_BACK
+        listOf("onKeyDown", "onKeyUp").forEach { name ->
+            val method = findMutableMethodOrThrow(
+                INPUT_METHOD_SERVICE_OWNER, name, "Z", listOf("I", "Landroid/view/KeyEvent;"),
+            )
+            val implementation = method.implementation!!
+            val calls = implementation.instructions.count { it.isMethodReference(back.encodedAbi) }
+            check(calls <= 1) { "Duplicate clipboard search Back delegate in $name" }
+            if (calls == 0) {
+                // p0..p2 are the three parameter words; v0 must be a local, free at entry.
+                check(implementation.registerCount > 3) { "No scratch register in $name" }
+                method.addInstructions(0, """
+                    ${RuntimeCallEmitter.invoke(back, "p1 .. p2")}
+                    move-result v0
+                    if-eqz v0, :gboard_patches_stock_key
+                    return v0
+                    :gboard_patches_stock_key
+                    nop
+                """.trimIndent())
+            } else {
+                check(implementation.instructions.first().isMethodReference(back.encodedAbi)) {
+                    "Misplaced clipboard search Back delegate in $name"
+                }
+            }
+        }
+        // Loup declares its own onComputeInsets (0x2ed414). The Insets object is captured at
+        // entry, where p1 is guaranteed to hold it; exits call without registers, so no
+        // parameter register reused by the method body is ever read by the delegate.
+        val insets = findMutableMethodOrThrow(
+            INPUT_METHOD_SERVICE_OWNER, "onComputeInsets", "V",
+            listOf("Landroid/inputmethodservice/InputMethodService\$Insets;"),
+        )
+        val begin = RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_INSETS_BEGIN
+        val begins = insets.implementation!!.instructions.count { it.isMethodReference(begin.encodedAbi) }
+        check(begins <= 1) { "Duplicate clipboard search insets capture" }
+        if (begins == 0) insets.addInstructions(0, RuntimeCallEmitter.invoke(begin, "p1"))
+        else check(insets.implementation!!.instructions.first().isMethodReference(begin.encodedAbi))
+        insets.applyVoidExitLifecycleDelegate(RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_INSETS, "")
     }
 }
