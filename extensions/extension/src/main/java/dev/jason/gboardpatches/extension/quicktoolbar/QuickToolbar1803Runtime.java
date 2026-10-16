@@ -50,8 +50,17 @@ public final class QuickToolbar1803Runtime {
         try {
             Object nativeBar = field(value, "j");
             if (controller.get() == value && bar.get() == nativeBar) return;
+            // Leso can deliver candidates before the new AP controller is attached.
+            // Preserve the pending owner across clear() and let onCandidates()
+            // validate that its view belongs to the new controller's root.
+            Object pendingOwner = candidateOwner.get();
+            boolean pendingNonempty = candidateListNonempty;
             clear();
             if (!(nativeBar instanceof View nativeView)) return;
+            if (pendingOwner != null) {
+                candidateOwner = new WeakReference<>(pendingOwner);
+                candidateListNonempty = pendingNonempty;
+            }
             Object nativeManager = call(value, "G");
             if (nativeManager == null) return;
             controller = new WeakReference<>(value);

@@ -70,4 +70,21 @@ public class QuickToolbarBindingTest {
         assertEquals(QuickToolbarState.Mode.SUGGESTIONS,f.binding.mode());
         assertEquals(View.VISIBLE,f.candidates.getVisibility());
     }
+    @Test public void arrowRefreshesOnLayoutDirectionChangeWithoutModeChange() throws Exception {
+        Fixture f=new Fixture();
+        f.button.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+        f.binding.update(true,true,true);
+        Object arrow=f.button.getForeground();
+        java.lang.reflect.Field back=arrow.getClass().getDeclaredField("back");
+        back.setAccessible(true);
+        assertFalse(back.getBoolean(arrow));
+        f.button.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        f.binding.update(true,true,true);
+        assertSame(arrow,f.button.getForeground());
+        assertTrue(back.getBoolean(arrow));
+        f.button.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+        f.binding.update(true,true,true);
+        assertFalse(back.getBoolean(arrow));
+    }
+
 }
