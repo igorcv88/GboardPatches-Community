@@ -43,4 +43,19 @@ public class QuickToolbar1803RuntimeBindingTest {
         candidates.g=0; QuickToolbar1803Runtime.onCandidates(candidates);
         assertEquals(View.VISIBLE,key.contents.getVisibility()); QuickToolbar1803Runtime.clear();
     }
+    @Test public void candidateListBeforeControllerCanStillBindToNewRow() {
+        Activity activity=Robolectric.buildActivity(Activity.class).setup().get();
+        FrameLayout root=new FrameLayout(activity), candidateRegion=new FrameLayout(activity);
+        Key key=new Key(activity); key.setId(0x7f0b053e); root.addView(key);
+        root.addView(candidateRegion); View candidate=new View(activity); candidateRegion.addView(candidate);
+        View bar=new View(activity); root.addView(bar); activity.setContentView(root);
+        Candidates owner=new Candidates(); owner.c=candidate; owner.r=candidateRegion;
+        Controller controller=new Controller(); controller.j=bar;
+        QuickToolbar1803Runtime.clear();
+        QuickToolbar1803Runtime.onCandidateList(owner,List.of("one","two"));
+        QuickToolbar1803Runtime.onControllerView(controller);
+        assertEquals(View.INVISIBLE,key.contents.getVisibility());
+        QuickToolbar1803Runtime.clear();
+    }
+
 }
