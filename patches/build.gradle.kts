@@ -203,6 +203,13 @@ patches {
     }
 }
 
+// Morphe targets JVM 11 but leaves Java sources at the build JDK's default (21 in CI).
+// Keep every source set, including Java tests, aligned with the Kotlin/Android target.
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
 kotlin {
     compilerOptions {
         freeCompilerArgs.add("-Xcontext-parameters")
