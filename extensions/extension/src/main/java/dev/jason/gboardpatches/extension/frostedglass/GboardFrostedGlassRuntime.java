@@ -103,13 +103,22 @@ public final class GboardFrostedGlassRuntime {
             // This delegate runs at entry to Gboard's onWindowShown. Defer surface
             // discovery until stock initialization has created its keyboard root.
             decor.post(() -> {
-                if (state.active && GboardFrostedGlassSettingsRuntime.isEnabled()
+                if (state.active && activeService.get() == service
+                        && GboardFrostedGlassSettingsRuntime.isEnabled()
                         && canUseBackgroundBlur(service)) {
                     scheduleApply(window, service);
                 }
             });
         } else {
-            onConfigureWindow(receiver, false, false);
+            // The stock callback may not have created the decor yet.
+            // Never force a synchronous window setup before it returns.
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                if (activeService.get() != service
+                        || !GboardFrostedGlassSettingsRuntime.isEnabled()
+                        || !canUseBackgroundBlur(service)) return;
+                Window ready = windowOf(service);
+                if (ready != null) scheduleApply(ready, service);
+            });
         }
     }
 
