@@ -60,6 +60,7 @@ internal enum class RuntimeCallId(internal val encodedAbi: String) {
     CLIPBOARD_SEARCH_OPENED("Ldev/jason/gboardpatches/extension/clipboard/ClipboardSearch1803Runtime;->opened(Ljava/lang/Object;)V"),
     CLIPBOARD_SEARCH_CLOSED("Ldev/jason/gboardpatches/extension/clipboard/ClipboardSearch1803Runtime;->closed(Ljava/lang/Object;)V"),
     CLIPBOARD_SEARCH_CHANGED("Ldev/jason/gboardpatches/extension/clipboard/ClipboardSearch1803Runtime;->changed(Ljava/lang/Object;)V"),
+    CLIPBOARD_NATIVE_SEARCH_END("Ldev/jason/gboardpatches/extension/clipboard/ClipboardNativeSearch1803;->end()V"),
     CLIPBOARD_RUNTIME_AFTER_ADAPTER_TRIM("Ldev/jason/gboardpatches/extension/clipboard/GboardClipboardRuntime;->afterAdapterTrim(Ljava/lang/Object;)V"),
     CLIPBOARD_RUNTIME_AFTER_ITEM_BIND("Ldev/jason/gboardpatches/extension/clipboard/GboardClipboardRuntime;->afterItemBind(Ljava/lang/Object;Ljava/lang/Object;I)V"),
     CLIPBOARD_RUNTIME_BEFORE_ITEM_BIND("Ldev/jason/gboardpatches/extension/clipboard/GboardClipboardRuntime;->beforeItemBind(Ljava/lang/Object;Ljava/lang/Object;I)V"),

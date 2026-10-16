@@ -1,3 +1,5 @@
+> **Superseded (16/10/2026):** o teclado interno de 34 dp e o filtro dentro do painel foram removidos. Ver `clipboard-native-search-plan-1803.md` (opção 2).
+
 # Clipboard search candidate — original 18.0.3
 
 Baseline main 8d8c6a52 / 3.12.1. ClipboardKeyboard.e/h and Lfjk.M lifecycle hooks
