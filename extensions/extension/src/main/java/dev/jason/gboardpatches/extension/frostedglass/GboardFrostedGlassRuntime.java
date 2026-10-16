@@ -27,6 +27,7 @@ import java.lang.reflect.Method;
 import java.lang.ref.WeakReference;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.lsposed.hiddenapibypass.HiddenApiBypass;
+import dev.jason.gboardpatches.extension.performance.ImePerformanceMetrics;
 
 /** Android public-API runtime for a bounded IME background blur. */
 public final class GboardFrostedGlassRuntime {
@@ -49,6 +50,7 @@ public final class GboardFrostedGlassRuntime {
             return;
         }
         activeService = new WeakReference<>(service);
+        ImePerformanceMetrics.refresh(service);
         Window window = windowOf(service);
         if (window == null) {
             return;
@@ -84,6 +86,7 @@ public final class GboardFrostedGlassRuntime {
             return;
         }
         activeService = new WeakReference<>(service);
+        ImePerformanceMetrics.refresh(service);
         Window window = windowOf(service);
         if (window == null) {
             return;
@@ -97,14 +100,25 @@ public final class GboardFrostedGlassRuntime {
         if (decor != null) {
             State state = stateFor(window);
             installDecorLayoutObserver(window, service, decor, state);
+            // This delegate runs at entry to Gboard's onWindowShown. Defer surface
+            // discovery until stock initialization has created its keyboard root.
             decor.post(() -> {
-                if (GboardFrostedGlassSettingsRuntime.isEnabled()
+                if (state.active && activeService.get() == service
+                        && GboardFrostedGlassSettingsRuntime.isEnabled()
                         && canUseBackgroundBlur(service)) {
                     scheduleApply(window, service);
                 }
             });
         } else {
-            onConfigureWindow(receiver, false, false);
+            // The stock callback may not have created the decor yet.
+            // Never force a synchronous window setup before it returns.
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                if (activeService.get() != service
+                        || !GboardFrostedGlassSettingsRuntime.isEnabled()
+                        || !canUseBackgroundBlur(service)) return;
+                Window ready = windowOf(service);
+                if (ready != null) scheduleApply(ready, service);
+            });
         }
     }
 
@@ -115,34 +129,33 @@ public final class GboardFrostedGlassRuntime {
             disable(window);
         }
         activeService = new WeakReference<>(null);
+        ImePerformanceMetrics.reportAndReset();
     }
 
-    private static void reapplyAfterLayout(Window window, Context context,
-            State state, long layoutGeneration) {
-        if (state.layoutGeneration != layoutGeneration
-                || !GboardFrostedGlassSettingsRuntime.isEnabled()) {
+    private static void queueApply(Window window, Context context, View decor, State state) {
+        if (!state.active) return;
+        if (state.pendingApply != null) {
+            ImePerformanceMetrics.count(ImePerformanceMetrics.Event.COALESCED_APPLY);
             return;
         }
-        try {
+        state.scheduledDecor = decor;
+        state.pendingApply = () -> {
+            state.pendingApply = null;
+            state.scheduledDecor = null;
+            if (!state.active) return;
+            synchronized (STATES) { if (STATES.get(window) != state) return; }
             verifyAndApply(window, context, state);
-        } catch (Throwable ignored) {
-            // Delayed theme reapplication must remain fail closed.
-        }
+        };
+        decor.postOnAnimation(state.pendingApply);
     }
 
     private static void installDecorLayoutObserver(Window window,
             Context context, View decor, State state) {
-        if (state.decorLayoutObserverInstalled) {
-            return;
-        }
+        if (state.decorLayoutObserverInstalled) return;
         View.OnLayoutChangeListener listener = (view, left, top, right, bottom,
                 oldLeft, oldTop, oldRight, oldBottom) -> {
-            if (!GboardFrostedGlassSettingsRuntime.isEnabled()) {
-                return;
-            }
-            long generation = ++state.layoutGeneration;
-            view.postDelayed(() -> reapplyAfterLayout(window, context, state, generation), 48L);
-            view.postDelayed(() -> reapplyAfterLayout(window, context, state, generation), 144L);
+            if (!state.active || !GboardFrostedGlassSettingsRuntime.isEnabled()) return;
+            queueApply(window, context, view, state);
         };
         decor.addOnLayoutChangeListener(listener);
         state.decorLayoutObserverInstalled = true;
@@ -161,13 +174,16 @@ public final class GboardFrostedGlassRuntime {
         }
     }
 
-    private static void scheduleApply(Window window, Context context) {
+    private static void scheduleApplyNow(Window window, Context context) {
         try {
             State state = stateFor(window);
-            window.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND);
-            window.setLayout(WindowManager.LayoutParams.MATCH_PARENT,
-                    WindowManager.LayoutParams.WRAP_CONTENT);
-            window.setGravity(Gravity.BOTTOM);
+            WindowManager.LayoutParams attributes = window.getAttributes();
+            if ((attributes.flags & WindowManager.LayoutParams.FLAG_BLUR_BEHIND) != 0)
+                window.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND);
+            if (attributes.width != WindowManager.LayoutParams.MATCH_PARENT
+                    || attributes.height != WindowManager.LayoutParams.WRAP_CONTENT)
+                window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT);
+            if (attributes.gravity != Gravity.BOTTOM) window.setGravity(Gravity.BOTTOM);
             View decor = window.getDecorView();
             if (decor == null) {
                 disable(window);
@@ -175,13 +191,13 @@ public final class GboardFrostedGlassRuntime {
             }
             constrainKeyboardSurface(decor, state);
             installDecorLayoutObserver(window, context, decor, state);
-            decor.postDelayed(() -> verifyAndApply(window, context, state), 32L);
+            queueApply(window, context, decor, state);
         } catch (Throwable ignored) {
             disable(window);
         }
     }
 
-    private static void verifyAndApply(Window window, Context context, State state) {
+    private static void verifyAndApplyNow(Window window, Context context, State state) {
         try {
             if (!GboardFrostedGlassSettingsRuntime.isEnabled()) {
                 disable(window);
@@ -202,19 +218,24 @@ public final class GboardFrostedGlassRuntime {
                 disable(window);
                 return;
             }
-            clearBlurEffects(window, state);
-            window.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND);
-            if (!state.windowBackgroundChanged) {
-                state.originalWindowBackground = window.getDecorView() == null
-                        ? null : window.getDecorView().getBackground();
+            View decor = window.getDecorView();
+            if (state.localBlurView != null || state.localRenderNode != null) clearBlurEffects(window, state);
+            boolean backgroundChanged = !state.windowBackgroundChanged
+                    || decor.getBackground() != state.blurBackground;
+            if (!backgroundChanged && state.windowBlurApplied && state.appliedRadius == radiusPx) {
+                ImePerformanceMetrics.count(ImePerformanceMetrics.Event.UNCHANGED_BLUR);
+                return;
             }
-            window.setBackgroundDrawable(transparentRoundedBackground(context));
-            state.windowBackgroundChanged = true;
-            window.setBackgroundBlurRadius(radiusPx);
+            if (backgroundChanged) {
+                state.originalWindowBackground = decor.getBackground();
+                if (state.blurBackground == null) state.blurBackground = transparentRoundedBackground(context);
+                window.setBackgroundDrawable(state.blurBackground);
+                state.windowBackgroundChanged = true;
+            }
+            if (!state.windowBlurApplied || state.appliedRadius != radiusPx) window.setBackgroundBlurRadius(radiusPx);
             state.windowBlurApplied = true;
             state.applied = true;
             state.appliedRadius = radiusPx;
-            Log.i(TAG, "applied bounded radius=" + radiusPx);
         } catch (Throwable ignored) {
             disable(window);
         }
@@ -456,7 +477,6 @@ public final class GboardFrostedGlassRuntime {
         }
         View inputArea = decor.findViewById(android.R.id.inputArea);
         if (inputArea != null) setWrapContentBottom(inputArea, state);
-        root.requestLayout();
     }
 
     private static void setWrapContentBottom(View view, State state) {
@@ -494,7 +514,7 @@ public final class GboardFrostedGlassRuntime {
                 && view.isShown();
     }
 
-    private static void applyThemeOpacity(View view, int customOpacity, State state) {
+    private static void applyThemeOpacityNow(View view, int customOpacity, State state) {
         Object tag = view.getTag();
         if (tag instanceof String tagString && isThemeSurfaceTag(tagString)) {
             Drawable background = view.getBackground();
@@ -505,9 +525,11 @@ public final class GboardFrostedGlassRuntime {
             }
             if (view != state.localBlurView && background != null
                     && background != state.localBlurDrawable) {
-                background.setAlpha(customOpacity >= 0
-                        ? customOpacity : state.originalSurfaceAlphas.get(view));
-                view.invalidate();
+                int alpha = customOpacity >= 0 ? customOpacity : state.originalSurfaceAlphas.get(view);
+                if (background.getAlpha() != alpha) {
+                    background.setAlpha(alpha);
+                    view.invalidate();
+                }
             }
         }
         if (view instanceof android.view.ViewGroup group) {
@@ -561,6 +583,10 @@ public final class GboardFrostedGlassRuntime {
             state = STATES.remove(window);
         }
         if (state == null) return;
+        state.active = false;
+        if (state.pendingApply != null && state.scheduledDecor != null)
+            state.scheduledDecor.removeCallbacks(state.pendingApply);
+        state.pendingApply = null; state.scheduledDecor = null;
         if (state.decorLayoutObserverInstalled) {
             View decor = window.getDecorView();
             if (decor != null) decor.removeOnLayoutChangeListener(state.decorLayoutObserver);
@@ -605,7 +631,7 @@ public final class GboardFrostedGlassRuntime {
         }
     }
 
-    private static void clearBlurEffects(Window window, State state) {
+    private static void clearBlurEffectsNow(Window window, State state) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && state.windowBlurApplied) {
             try {
                 window.setBackgroundBlurRadius(0);
@@ -658,7 +684,10 @@ public final class GboardFrostedGlassRuntime {
         int localOriginalAlpha = 255;
         final Map<View, Integer> originalSurfaceAlphas = new IdentityHashMap<>();
         final Map<View, LayoutSnapshot> originalLayouts = new IdentityHashMap<>();
-        long layoutGeneration;
+        boolean active = true;
+        View scheduledDecor;
+        Runnable pendingApply;
+        Drawable blurBackground;
         boolean decorLayoutObserverInstalled;
         View.OnLayoutChangeListener decorLayoutObserver;
 
@@ -700,6 +729,30 @@ public final class GboardFrostedGlassRuntime {
             frameGravity = params instanceof android.widget.FrameLayout.LayoutParams frame
                     ? frame.gravity : null;
         }
+    }
+
+    private static void scheduleApply(Window window, Context context) {
+        long start = ImePerformanceMetrics.begin();
+        try { scheduleApplyNow(window, context); }
+        finally { ImePerformanceMetrics.end(ImePerformanceMetrics.Event.BLUR_SCHEDULE, start); }
+    }
+
+    private static void verifyAndApply(Window window, Context context, State state) {
+        long start = ImePerformanceMetrics.begin();
+        try { verifyAndApplyNow(window, context, state); }
+        finally { ImePerformanceMetrics.end(ImePerformanceMetrics.Event.BLUR_APPLY, start); }
+    }
+
+    private static void clearBlurEffects(Window window, State state) {
+        long start = ImePerformanceMetrics.begin();
+        try { clearBlurEffectsNow(window, state); }
+        finally { ImePerformanceMetrics.end(ImePerformanceMetrics.Event.BLUR_CLEAR, start); }
+    }
+
+    private static void applyThemeOpacity(View view, int customOpacity, State state) {
+        long start = ImePerformanceMetrics.begin();
+        try { applyThemeOpacityNow(view, customOpacity, state); }
+        finally { ImePerformanceMetrics.end(ImePerformanceMetrics.Event.THEME_OPACITY, start); }
     }
 
 }

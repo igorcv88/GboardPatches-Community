@@ -1,6 +1,7 @@
 package dev.jason.gboardpatches.extension.frostedglass;
 
 import android.content.Context;
+import dev.jason.gboardpatches.extension.performance.ImePerformanceMetrics;
 import android.content.SharedPreferences;
 import android.util.Log;
 
@@ -100,6 +101,13 @@ public final class GboardFrostedGlassSettingsFeature
                         }
                         GboardPatchesSettingsContract.refresh(host);
                         requestRestart(host);
+                    }));
+            rows.add(new GboardPatchesSettingsContract.ToggleRow(
+                    "Performance diagnostics", "Record aggregate IME timings and counts; no editor or clipboard text.",
+                    true, Boolean.TRUE.equals(preferences.getAll().get(ImePerformanceMetrics.PREFERENCE)), value -> {
+                        preferences.edit().putBoolean(ImePerformanceMetrics.PREFERENCE, value).apply();
+                        ImePerformanceMetrics.refresh(context);
+                        GboardPatchesSettingsContract.refresh(host);
                     }));
             rows.add(new GboardPatchesSettingsContract.SelectorRow(
                     radiusTitle, radiusSummary, Integer.toString(strength), enabled,
