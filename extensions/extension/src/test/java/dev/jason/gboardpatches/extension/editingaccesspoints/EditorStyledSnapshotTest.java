@@ -8,9 +8,11 @@ import android.text.style.URLSpan;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(sdk = {26, 33})
 public class EditorStyledSnapshotTest {
     private SpannedString styled() {
         SpannableString text = new SpannableString("link bold");

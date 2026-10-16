@@ -1,6 +1,7 @@
 package dev.jason.gboardpatches.extension.editingaccesspoints;
 
 import android.text.Annotation;
+import android.os.Build;
 import android.text.NoCopySpan;
 import android.text.Spanned;
 import android.text.style.*;
@@ -30,7 +31,11 @@ final class StableEditorSpans {
         Class<?> type = span.getClass();
         if (type == StyleSpan.class) {
             StyleSpan style = (StyleSpan) span;
-            return List.of(style.getStyle(), style.getFontWeightAdjustment());
+            // Font-weight adjustment was added in API 33. The same patch also runs on
+            // API 26–32, where resolving that method would discard otherwise valid history.
+            return Build.VERSION.SDK_INT >= 33
+                    ? List.of(style.getStyle(), style.getFontWeightAdjustment())
+                    : List.of(style.getStyle());
         }
         if (type == URLSpan.class) return ((URLSpan) span).getURL();
         if (type == ForegroundColorSpan.class) return ((ForegroundColorSpan) span).getForegroundColor();

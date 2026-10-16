@@ -5,8 +5,13 @@ import android.text.style.StyleSpan;
 import android.text.style.URLSpan;
 import java.lang.reflect.Proxy;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 import static org.junit.Assert.*;
 
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk = {26, 33})
 public class StableEditorSpansTest {
     static Spanned text(Object[] spans, int flags) {
         return (Spanned) Proxy.newProxyInstance(StableEditorSpansTest.class.getClassLoader(),
@@ -39,5 +44,10 @@ public class StableEditorSpansTest {
         assertNull(StableEditorSpans.describe(text(new Object[]{new Object()},33)));
         assertNull(StableEditorSpans.describe(text(new Object[]{new StyleSpan(1)},Spanned.SPAN_COMPOSING)));
         assertTrue(StableEditorSpans.describe("text").isEmpty());
+    }
+
+    @Test @Config(sdk = 33) public void fontWeightAdjustmentIsPartOfStyleValue() {
+        assertNotEquals(StableEditorSpans.describe(text(new Object[]{new StyleSpan(1, 100)},33)),
+                StableEditorSpans.describe(text(new Object[]{new StyleSpan(1, 200)},33)));
     }
 }
