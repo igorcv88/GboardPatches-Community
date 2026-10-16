@@ -143,6 +143,19 @@ public class JournalingInputConnectionTest {
         assertFalse(wrapped.equals(new FakeEditor().connection));
     }
 
+    /** Mirrors Loup.az() (0x2f01e4): returns !Objects.equals(current, binding.getConnection()). */
+    private static boolean realEditorBound(InputConnection current, InputConnection binding) {
+        return !java.util.Objects.equals(current, binding);
+    }
+
+    @Test public void loupAzKeepsDummyAndRealConnectionSemantics() {
+        FakeEditor dummy = new FakeEditor(), editor = new FakeEditor();
+        // No editor started: IMS returns the binding's own (dummy) connection.
+        assertFalse(realEditorBound(JournalingInputConnection.wrap(dummy.connection), dummy.connection));
+        // Editor started: current connection differs from the binding connection.
+        assertTrue(realEditorBound(JournalingInputConnection.wrap(editor.connection), dummy.connection));
+    }
+
     @Test public void composingRunCostsOneSnapshotPair() {
         EditorActionSession session = new EditorActionSession();
         FakeEditor editor = setUp(session);

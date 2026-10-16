@@ -52,4 +52,8 @@ Exige três bindings que só podem ser obtidos do APK 18.0.3: (1) a chamada que 
 - Custo: durante a composição de uma palavra, `setComposingText` não faz leitura; um par de snapshots por palavra (base ao iniciar, resultado ao confirmar/finalizar/interromper). Undo/Redo fecham a composição aberta antes de ler o editor. Limite: uma alteração externa durante a composição de uma palavra é atribuída a essa palavra.
 - Contadores para validação no aparelho, ao fim de cada sessão de entrada: `adb logcat -s GboardPatches` mostra `Undo journal session: commit=… compose=… delete=… keyDown=… correction=… snapshots=…`. Só números. Se ChatGPT/EditText mostram contadores zerados durante a digitação, o Gboard não está passando pelo wrapper naquele caminho.
 
-Pergunta pendente: **`Loup;->az()Z`** (`classes.dex`, `0x2f01e4`): ordem dos argumentos em `Objects.equals` (`pc=28`) e o que o resultado controla em `onStartInput` (`pc=83`) e `onStartInputView` (`pc=99`). Se a ordem for `Objects.equals(binding, current)`, o resultado fica `false` com o wrapper e é preciso tratar isso no patch.
+### `Loup.az()` — respondido (extração binária de 16/10/2026)
+
+`az()` retorna `!Objects.equals(getCurrentInputConnection(), InputBinding.getConnection())`, nessa ordem. Significa "há editor real ligado": quando a conexão atual é a própria conexão do binding (dummy), `onStartInputView` registra `Dummy InputConnection bound` e, se `Loup.H()`, chama `requestHideSelf(0)`. `onStartInput` repassa o resultado a `Loup.v(EditorInfo,ZZ)`.
+
+**Regressão no `main` (PR #15):** sem `equals`, o wrapper nunca é igual à conexão do binding, então `az()` passa a retornar sempre `true` e o caminho de conexão dummy (inclusive a ocultação) deixa de existir. O `equals` deste PR restaura a semântica original para a ordem usada (`Objects.equals(wrapper, raw)`), coberta por `loupAzKeepsDummyAndRealConnectionSemantics`. **Não publicar release a partir do `main` sem este PR.**
