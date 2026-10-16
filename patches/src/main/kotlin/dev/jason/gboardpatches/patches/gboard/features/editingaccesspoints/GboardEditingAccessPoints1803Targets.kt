@@ -9,6 +9,7 @@ import dev.jason.gboardpatches.patches.gboard.shared.mutableClass
 /** Reviewed target shape. No editor policy belongs in this version adapter. */
 internal object GboardEditingAccessPoints1803Targets {
     private const val OWNER = "Loup;"
+    const val serviceOwner = OWNER
     // Same Android override already reviewed by GboardCalculator1803Targets.
     val selectionUpdated = lifecycle("onUpdateSelection", "I", "I", "I", "I", "I", "I")
     val startView = lifecycle("onStartInputView", "Landroid/view/inputmethod/EditorInfo;", "Z")

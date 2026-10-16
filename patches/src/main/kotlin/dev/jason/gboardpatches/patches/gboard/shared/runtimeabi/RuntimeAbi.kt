@@ -12,6 +12,7 @@ internal enum class RuntimeCallId(internal val encodedAbi: String) {
     EDITING_ACCESS_POINTS_SELECTION_UPDATED("Ldev/jason/gboardpatches/extension/editingaccesspoints/GboardEditingAccessPointsRuntime;->onSelectionUpdated(IIII)V"),
     EDITING_ACCESS_POINTS_START("Ldev/jason/gboardpatches/extension/editingaccesspoints/GboardEditingAccessPointsRuntime;->start(Ljava/lang/Object;)V"),
     EDITING_ACCESS_POINTS_END("Ldev/jason/gboardpatches/extension/editingaccesspoints/GboardEditingAccessPointsRuntime;->end()V"),
+    EDITING_ACCESS_POINTS_WRAP_INPUT_CONNECTION("Ldev/jason/gboardpatches/extension/editingaccesspoints/GboardEditingAccessPointsRuntime;->wrapInputConnection(Landroid/view/inputmethod/InputConnection;)Landroid/view/inputmethod/InputConnection;"),
     ACCESS_POINT_COUNT_RUNTIME_APPLY_FLAG_VALUE("Ldev/jason/gboardpatches/extension/accesspointcount/GboardAccessPointCountRuntime;->applyFlagValue(Ljava/lang/String;Ljava/lang/Object;)Ljava/lang/Object;"),
     ACCESSIBILITY_LAYOUT_RUNTIME_APPLY_OVERRIDDEN_FLAG_VALUE("Ldev/jason/gboardpatches/extension/accessibilitylayout/GboardAccessibilityLayout1803Runtime;->applyOverriddenFlagValue(Ljava/lang/String;Ljava/lang/Object;)Ljava/lang/Object;"),
     ACCESS_POINT_CONTRIBUTIONS_1803_AFTER_CONTROLLER_CREATED("Ldev/jason/gboardpatches/extension/accesspoint/GboardAccessPointContributions1803Runtime;->afterControllerCreated(Ljava/lang/Object;Landroid/content/Context;)V"),

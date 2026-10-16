@@ -37,7 +37,18 @@ public final class QuickToolbar1803Runtime {
         if (key == null || GboardEditingAccessPointsSettings.ENABLED.equals(key))
             enabled = GboardEditingAccessPointsSettings.read(prefs, GboardEditingAccessPointsSettings.ENABLED);
     };
+    /** Favorites shown by the event fallback, without the arrow binding on the button. */
+    private static boolean fallbackShown;
+    private static final java.util.Set<String> REPORTED = ConcurrentHashMap.newKeySet();
     private QuickToolbar1803Runtime() {}
+
+    /** Each distinct reason for leaving the stock path is logged once per process; no user data. */
+    static void diagnose(String reason) {
+        if (REPORTED.add(reason)) {
+            try { android.util.Log.w("GboardPatches", "Quick toolbar: " + reason); }
+            catch (Throwable ignored) { }
+        }
+    }
 
     public static void onCandidateList(Object owner, Object candidates) {
         if (!main() || applying) return;
@@ -56,35 +67,41 @@ public final class QuickToolbar1803Runtime {
             Object pendingOwner = candidateOwner.get();
             boolean pendingNonempty = candidateListNonempty;
             clear();
-            if (!(nativeBar instanceof View nativeView)) return;
+            if (!(nativeBar instanceof View nativeView)) { diagnose("controller bar is not a view"); return; }
             if (pendingOwner != null) {
                 candidateOwner = new WeakReference<>(pendingOwner);
                 candidateListNonempty = pendingNonempty;
             }
             Object nativeManager = call(value, "G");
-            if (nativeManager == null) return;
+            if (nativeManager == null) { diagnose("controller has no manager"); return; }
             controller = new WeakReference<>(value);
             manager = new WeakReference<>(nativeManager);
             bar = new WeakReference<>(nativeView);
             Object candidates = candidateOwner.get();
             if (candidates != null) onCandidates(candidates);
-        } catch (Throwable ignored) { clear(); }
+        } catch (Throwable failure) { diagnose("controller binding failed: " + failure.getClass().getSimpleName()); clear(); }
     }
 
     public static void onCandidates(Object value) {
         if (!main() || applying) return;
         try {
             Object nativeCandidate = field(value, "c");
-            if (!(nativeCandidate instanceof View candidate)) return;
+            if (!(nativeCandidate instanceof View candidate)) { diagnose("candidate view missing"); return; }
             View rootView = candidate.getRootView();
             View nativeBar = bar.get();
-            if (nativeBar == null || candidate.getRootView() != nativeBar.getRootView()) return;
+            if (nativeBar == null || candidate.getRootView() != nativeBar.getRootView()) {
+                diagnose(nativeBar == null ? "candidates before favorites bar" : "candidates in another window");
+                return;
+            }
             View left = rootView.findViewById(0x7f0b053e);
-            if (left == null || !isToggleCode(primaryCode(left))) { clearBinding(); return; }
+            if (left == null) { diagnose("left header key 0x7f0b053e missing"); clearBinding(); return; }
+            if (!isToggleCode(primaryCode(left))) { diagnose("left header key has another action"); clearBinding(); return; }
             if (button.get() != left || binding == null) {
                 clearBinding();
                 Object contents = call(left, "d");
-                if (!(contents instanceof ViewGroup content) || contents == left) return;
+                if (!(contents instanceof ViewGroup content) || contents == left) {
+                    diagnose("left header key has no content group"); return;
+                }
                 TypedArray colors = left.getContext().obtainStyledAttributes(new int[]{android.R.attr.textColorPrimary});
                 int color;
                 try { color = colors.getColor(0, 0xff808080); } finally { colors.recycle(); }
@@ -109,7 +126,10 @@ public final class QuickToolbar1803Runtime {
             binding.update(enabled,
                     active && (candidate.isShown() || binding.mode() == QuickToolbarState.Mode.QUICK_TOOLS),
                     hasCandidates);
-        } catch (Throwable ignored) { clearBinding(); }
+        } catch (Throwable failure) {
+            diagnose("candidate binding failed: " + failure.getClass().getSimpleName());
+            clearBinding();
+        }
     }
 
     public static void onCandidatesCleared(Object owner) {
@@ -121,39 +141,114 @@ public final class QuickToolbar1803Runtime {
     }
 
     public static boolean handleEvent(Object nativeManager, Object event) {
-        if (!main() || applying || nativeManager != manager.get() || binding == null) return false;
+        if (!main() || applying || nativeManager == null) return false;
+        int code;
         try {
             Object action = call(event, "g");
-            if (action == null || !isToggleCode(((Number) field(action, "c")).intValue())) return false;
-            View left = button.get(), root = header.get();
-            if (left == null || root == null || !root.isShown() || !isToggleCode(primaryCode(left))) {
-                clearBinding(); return false;
-            }
-            return binding.onMenuEvent();
-        } catch (Throwable ignored) {
-            boolean wasArrow = binding != null && binding.mode() != QuickToolbarState.Mode.STOCK_TOOLBAR;
-            clearBinding();
-            return wasArrow;
+            if (action == null) return false;
+            code = ((Number) field(action, "c")).intValue();
+        } catch (Throwable failure) {
+            diagnose("event action unreadable: " + failure.getClass().getSimpleName());
+            return false;
         }
+        if (code != -40005 && code != -40006) return false;
+        if (binding != null && nativeManager == manager.get()) {
+            try {
+                if (!isToggleCode(code)) return false;
+                View left = button.get(), root = header.get();
+                if (left == null || root == null || !root.isShown() || !isToggleCode(primaryCode(left))) {
+                    diagnose("bound button no longer matches the header");
+                    clearBinding();
+                } else {
+                    return binding.onMenuEvent();
+                }
+            } catch (Throwable failure) {
+                boolean wasArrow = binding != null && binding.mode() != QuickToolbarState.Mode.STOCK_TOOLBAR;
+                diagnose("bound event failed: " + failure.getClass().getSimpleName());
+                clearBinding();
+                if (wasArrow) return true;
+            }
+        } else if (binding != null) {
+            diagnose("event manager differs from bound controller");
+        }
+        return fallbackEvent(nativeManager, code);
+    }
+
+    /**
+     * Used when the arrow binding is absent: while suggestions are active the shortcuts key
+     * toggles the native favorites row instead of opening the full panel over the keys.
+     */
+    static boolean fallbackEvent(Object nativeManager, int code) {
+        if (!featureEnabled()) return false;
+        // Only favorites this fallback opened are closed here: in the normal keyboard state the
+        // native row is visible by itself and the key must keep opening the full panel.
+        if (fallbackShown) {
+            fallbackShown = false;
+            if (favoritesVisible()) {
+                hideFavorites(nativeManager);
+                return true;
+            }
+        }
+        if (code != -40005) return false;
+        if (!candidateListNonempty || candidateOwner.get() == null) {
+            diagnose("stock panel kept: no active suggestions");
+            return false;
+        }
+        if (!invokeShowFavorites(nativeManager)) {
+            diagnose("favorites fallback failed; stock panel kept");
+            return false;
+        }
+        fallbackShown = true;
+        diagnose("favorites shown by event fallback (no button binding)");
+        return true;
+    }
+
+    private static boolean favoritesVisible() {
+        Object nativeController = controller.get();
+        if (nativeController != null) {
+            try { return Boolean.TRUE.equals(field(nativeController, "o")); }
+            catch (Throwable ignored) { /* Unknown: assume the row this fallback opened is still shown. */ }
+        }
+        return true;
+    }
+
+    static Boolean enabledOverride; // Tests only.
+
+    private static boolean featureEnabled() {
+        if (enabledOverride != null) return enabledOverride;
+        if (preferences != null) return enabled;
+        try {
+            return dev.jason.gboardpatches.extension.editingaccesspoints.GboardEditingAccessPointsRuntime.featureEnabled();
+        } catch (Throwable ignored) { return false; }
     }
 
     private static boolean showFavorites() {
         Object target = manager.get();
-        if (target == null) return false;
+        if (target == null || !invokeShowFavorites(target)) return false;
+        try {
+            return Boolean.TRUE.equals(field(controller.get(), "o"))
+                    && !Boolean.TRUE.equals(field(controller.get(), "p")) && bar.get() != null && bar.get().isShown();
+        } catch (Throwable ignored) { return false; }
+    }
+
+    /** Reviewed Lmln.M(ZZLpfz;Z)V: native ordered favorites, never Lmlh.D (all shortcuts). */
+    private static boolean invokeShowFavorites(Object target) {
         applying = true;
         try {
             Class<?> reason = target.getClass().getClassLoader().loadClass("pfz");
             Field manual = reason.getDeclaredField("b"); manual.setAccessible(true);
             Method show = target.getClass().getDeclaredMethod("M", boolean.class, boolean.class, reason, boolean.class);
             show.setAccessible(true); show.invoke(target, true, false, manual.get(null), false);
-            return Boolean.TRUE.equals(field(controller.get(), "o"))
-                    && !Boolean.TRUE.equals(field(controller.get(), "p")) && bar.get() != null && bar.get().isShown();
-        } catch (Throwable ignored) { return false; }
-        finally { applying = false; }
+            return true;
+        } catch (Throwable failure) {
+            diagnose("show favorites failed: " + failure.getClass().getSimpleName());
+            return false;
+        } finally { applying = false; }
     }
 
-    private static void hideFavorites() {
-        Object target = manager.get();
+    private static void hideFavorites() { hideFavorites(manager.get()); }
+
+    private static void hideFavorites(Object target) {
         if (target == null || applying) return;
         applying = true;
         try {
@@ -207,9 +302,13 @@ public final class QuickToolbar1803Runtime {
         button.clear(); header.clear();
         if (previous != null) previous.close();
     }
-    public static void reset() { if (main()) clearBinding(); }
+    public static void reset() {
+        if (!main()) return;
+        // A new input session must not inherit the previous editor's suggestion state.
+        clearBinding(); fallbackShown = false; candidateOwner.clear(); candidateListNonempty = false;
+    }
     public static void clear() {
-        clearBinding(); controller.clear(); manager.clear(); bar.clear();
+        clearBinding(); controller.clear(); manager.clear(); bar.clear(); fallbackShown = false;
         candidateOwner.clear(); candidateListNonempty = false;
         if (preferences != null) preferences.unregisterOnSharedPreferenceChangeListener(SETTINGS_CHANGED);
         preferences = null;
