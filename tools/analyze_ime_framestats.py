@@ -71,7 +71,10 @@ def main():
         baseline=analyze(args.compare.read_text())
         result['comparison']={
             'baseline_sha256':baseline['sha256'],
-            'jank_delta_percentage_points':round(result['reported_jank_percent']-baseline['reported_jank_percent'],4),
+            'jank_delta_percentage_points':(
+                round(result['reported_jank_percent'] - baseline['reported_jank_percent'], 4)
+                if result['reported_jank_percent'] is not None
+                and baseline['reported_jank_percent'] is not None else None),
             'warning':'Only a controlled same-device/same-scenario capture supports a performance claim.'}
     print(json.dumps(result,indent=2))
 
