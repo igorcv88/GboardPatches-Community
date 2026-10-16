@@ -296,6 +296,7 @@ public final class EditorActionSession {
         JournalingInputConnection wrapper = JournalingInputConnection.forConnection(connection);
         if (wrapper == null) return null;
         InputConnection raw = wrapper.raw;
+        wrapper.seal();
         ImeEditJournal.State state = wrapper.state();
         ImeEditJournal.Edit edit = state == null ? null
                 : isUndo ? wrapper.journal.peekUndo(state) : wrapper.journal.peekRedo(state);
