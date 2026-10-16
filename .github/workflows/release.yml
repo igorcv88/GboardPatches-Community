@@ -6,10 +6,11 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: 'Release bundle, repair stable metadata, or publish existing theme previews'
+        description: 'Validate without publishing, release bundle, repair metadata, or publish previews'
         type: choice
-        default: release
+        default: validate-only
         options:
+          - validate-only
           - release
           - repair-metadata
           - theme-previews
@@ -32,6 +33,66 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate-only:
+    if: ${{ inputs.operation == 'validate-only' }}
+    permissions:
+      contents: read
+      packages: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Resolve validation version without creating tags
+        env:
+          EXPLICIT_TAG: ${{ inputs.tag }}
+          MORPHE_TOKEN: ${{ secrets.MORPHE_PACKAGES_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$MORPHE_TOKEN" || { echo '::error::MORPHE_PACKAGES_TOKEN is required (read:packages).'; exit 1; }
+          git tag -l > "$RUNNER_TEMP/tags"
+          baseline=$(python3 -c 'import re; print(re.search(r"(?m)^version\s*=\s*(\S+)",open("gradle.properties").read()).group(1))')
+          python3 tools/release_bundle.py resolve --tags "$RUNNER_TEMP/tags" \
+            --baseline "$baseline" --tag "$EXPLICIT_TAG" >> "$GITHUB_ENV"
+      - name: Set up Java 21 and Gradle dependency/build caches
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            **/*.gradle.kts
+            gradle/libs.versions.toml
+            gradle/wrapper/gradle-wrapper.properties
+            gradle.properties
+
+      - name: Cache Robolectric Android runtimes
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ runner.os }}-${{ hashFiles('extensions/extension/build.gradle.kts') }}
+          restore-keys: robolectric-${{ runner.os }}-
+
+      - name: Test release tooling locally in the release job
+        run: python3 -m unittest discover -s tools/tests -v
+
+      - name: Tests, patch contracts and Android bundle in one Gradle invocation
+        env:
+          GITHUB_ACTOR: ${{ github.repository_owner }}
+          GITHUB_TOKEN: ${{ secrets.MORPHE_PACKAGES_TOKEN }}
+        run: |
+          bash gradlew --build-cache -Pversion="$VERSION" \
+            :extensions:extension:testDebugUnitTest \
+            :extensions:calculator:testDebugUnitTest \
+            :patches:check :patches:buildAndroid :patches:verifyReleaseBundleImport generatePatchesList
+
+      - name: Validate MPP without publishing files
+        run: |
+          python3 tools/release_bundle.py validate "patches/build/libs/patches-$VERSION.mpp" \
+            --version "$VERSION" --repository "$GITHUB_REPOSITORY"
+          git diff --check
+          echo 'Validation finished. No tags, releases, source pointer updates or Actions artifacts were published.'
+
   release:
     if: ${{ inputs.operation == 'release' }}
     runs-on: ubuntu-latest
