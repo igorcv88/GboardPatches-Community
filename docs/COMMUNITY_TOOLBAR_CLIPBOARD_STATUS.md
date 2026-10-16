@@ -1,6 +1,6 @@
-# Contextual toolbar and native clipboard search — foundations
+# Contextual toolbar and native clipboard search — status
 
-These components are tested, but are not connected to the Gboard interface yet. No additional toolbar or clipboard UI is installed by this PR.
+Latest: [2026-10-16 UI/build progress](COMMUNITY_UI_BUILD_2026-10-16.md). The contextual toolbar now has a guarded 18.0.3 view/event binding and Android view-tree tests; device integration remains unverified. Clipboard search still has no visual/input binding. The foundation notes below record the earlier PR #2 state.
 
 `QuickToolbarState` implements stock / suggestions / quick tools transitions. Active candidates switch the left button between favorites and candidates; absent candidates, context loss, detach and feature-off reset to the stock action. The adapter must feed actual candidate state, not infer it from an empty editor string. Favorites must come from the existing AP catalog.
 
