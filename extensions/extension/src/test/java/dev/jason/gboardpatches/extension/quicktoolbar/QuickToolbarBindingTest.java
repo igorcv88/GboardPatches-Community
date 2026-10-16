@@ -70,20 +70,35 @@ public class QuickToolbarBindingTest {
         assertEquals(QuickToolbarState.Mode.SUGGESTIONS,f.binding.mode());
         assertEquals(View.VISIBLE,f.candidates.getVisibility());
     }
+    // No manifest is supplied to Robolectric. Explicitly enable RTL support in
+    // its ApplicationInfo, then perform a layout pass to resolve direction.
+    private static void resolveDirection(Fixture f, int direction) {
+        f.activity.getApplicationInfo().targetSdkVersion = 33;
+        f.activity.getApplicationInfo().flags |= android.content.pm.ApplicationInfo.FLAG_SUPPORTS_RTL;
+        f.root.setLayoutDirection(direction);
+        f.button.setLayoutDirection(direction);
+        int size = View.MeasureSpec.makeMeasureSpec(480, View.MeasureSpec.EXACTLY);
+        f.root.measure(size, size);
+        f.root.layout(0, 0, 480, 480);
+        assertEquals("RTL test setup must resolve the requested direction",
+                direction, f.button.getLayoutDirection());
+    }
     @Test public void arrowRefreshesOnLayoutDirectionChangeWithoutModeChange() throws Exception {
-        Fixture f=new Fixture();
-        f.button.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
-        f.binding.update(true,true,true);
-        Object arrow=f.button.getForeground();
-        java.lang.reflect.Field back=arrow.getClass().getDeclaredField("back");
+        Fixture f = new Fixture();
+        resolveDirection(f, View.LAYOUT_DIRECTION_LTR);
+        f.binding.update(true, true, true);
+        Object arrow = f.button.getForeground();
+        java.lang.reflect.Field back = arrow.getClass().getDeclaredField("back");
         back.setAccessible(true);
         assertFalse(back.getBoolean(arrow));
-        f.button.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        f.binding.update(true,true,true);
-        assertSame(arrow,f.button.getForeground());
+
+        resolveDirection(f, View.LAYOUT_DIRECTION_RTL);
+        f.binding.update(true, true, true);
+        assertSame(arrow, f.button.getForeground());
         assertTrue(back.getBoolean(arrow));
-        f.button.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
-        f.binding.update(true,true,true);
+
+        resolveDirection(f, View.LAYOUT_DIRECTION_LTR);
+        f.binding.update(true, true, true);
         assertFalse(back.getBoolean(arrow));
     }
 
