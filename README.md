@@ -93,12 +93,6 @@ Import custom ZIP themes and beautiful themes from the official Rboard repositor
 </details>
 
 <details>
-  <summary><code>Custom Symbols</code></summary>
-
-  Adds a dedicated symbols tab and a quick access entry from the comma long-press popup.
-</details>
-
-<details>
   <summary><code>Simple Calculator</code></summary>
 
   Adds an optional inline calculator for arithmetic expressions typed in any text field. The result appears in Gboard's suggestion row; tap it to replace the expression, or long-press it to copy the result.
@@ -269,28 +263,6 @@ Shows a dismiss button in the proactive suggestions bar.
   <summary><code>Package Rename</code></summary>
 
   Renames the patched package so it can be installed alongside the official Gboard app.
-</details>
-
-### Taiwan-focused Features
-
-Features tailored to Traditional Chinese and Zhuyin input workflows.
-
-<details>
-  <summary><code>Zhuyin Slide Input</code></summary>
-
-  On the Zhuyin keyboard, swipe up or down to enter English letters without switching to another keyboard layout.
-</details>
-
-<details>
-  <summary><code>Zhuyin Quick Traditional/Simplified Toggle</code></summary>
-
-  Swipe up on the Zhuyin <code>ㄥ</code> key to quickly toggle between Traditional and Simplified Chinese.
-</details>
-
-<details>
-  <summary><code>Zhuyin Bottom Row Key Sizes</code></summary>
-
-  Adjusts the seven bottom-row slot sizes on the Zhuyin keyboard, including <code>?123</code>, <code>，</code>, the globe key, space, <code>ㄦ</code>, backspace, and the IME action key.
 </details>
 
 ## Install
