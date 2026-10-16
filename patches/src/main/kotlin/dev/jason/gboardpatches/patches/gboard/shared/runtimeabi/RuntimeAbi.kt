@@ -1,6 +1,11 @@
 package dev.jason.gboardpatches.patches.gboard.shared.runtimeabi
 
 internal enum class RuntimeCallId(internal val encodedAbi: String) {
+    QUICK_TOOLBAR_CANDIDATE_LIST("Ldev/jason/gboardpatches/extension/quicktoolbar/QuickToolbar1803Runtime;->onCandidateList(Ljava/lang/Object;Ljava/lang/Object;)V"),
+    QUICK_TOOLBAR_CONTROLLER_VIEW("Ldev/jason/gboardpatches/extension/quicktoolbar/QuickToolbar1803Runtime;->onControllerView(Ljava/lang/Object;)V"),
+    QUICK_TOOLBAR_CANDIDATES("Ldev/jason/gboardpatches/extension/quicktoolbar/QuickToolbar1803Runtime;->onCandidates(Ljava/lang/Object;)V"),
+    QUICK_TOOLBAR_CLEARED("Ldev/jason/gboardpatches/extension/quicktoolbar/QuickToolbar1803Runtime;->onCandidatesCleared(Ljava/lang/Object;)V"),
+    QUICK_TOOLBAR_EVENT("Ldev/jason/gboardpatches/extension/quicktoolbar/QuickToolbar1803Runtime;->handleEvent(Ljava/lang/Object;Ljava/lang/Object;)Z"),
     EDITING_NATIVE_CLIPBOARD_ATTEMPT("Ldev/jason/gboardpatches/extension/editingaccesspoints/GboardEditingAccessPointsRuntime;->beforeNativeClipboardCard()V"),
     EDITING_NATIVE_CLIPBOARD_BEFORE_TEXT("Ldev/jason/gboardpatches/extension/editingaccesspoints/GboardEditingAccessPointsRuntime;->beforeNativeClipboardText(Ljava/lang/String;)V"),
     EDITING_NATIVE_CLIPBOARD_AFTER_TEXT("Ldev/jason/gboardpatches/extension/editingaccesspoints/GboardEditingAccessPointsRuntime;->afterNativeClipboardText()V"),

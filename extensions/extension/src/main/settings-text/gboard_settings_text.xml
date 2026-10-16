@@ -3238,4 +3238,12 @@
         <translation locale="en">Editing buttons settings unavailable. Reopen settings and try again.</translation>
         <translation locale="zh-Hant">編輯按鈕設定無法載入，請重新開啟設定再試一次。</translation>
     </string>
+    <string name="gboard_quick_toolbar_suggestions">
+        <translation locale="en">Show suggestions</translation>
+        <translation locale="zh-Hant">顯示建議</translation>
+    </string>
+    <string name="gboard_quick_toolbar_favorites">
+        <translation locale="en">Show favorite tools</translation>
+        <translation locale="zh-Hant">顯示常用工具</translation>
+    </string>
 </settings-text>

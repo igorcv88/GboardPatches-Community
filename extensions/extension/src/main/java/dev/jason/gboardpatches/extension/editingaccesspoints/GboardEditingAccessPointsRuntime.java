@@ -60,6 +60,7 @@ public final class GboardEditingAccessPointsRuntime {
     }
 
     public static void end() {
+        dev.jason.gboardpatches.extension.quicktoolbar.QuickToolbar1803Runtime.reset();
         SESSION.end();
         service.clear();
         editor = null;
