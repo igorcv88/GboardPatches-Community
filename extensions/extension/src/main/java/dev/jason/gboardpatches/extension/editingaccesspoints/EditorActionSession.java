@@ -116,6 +116,9 @@ public final class EditorActionSession {
             }
             boolean historyAction = action == EditorAction.UNDO || action == EditorAction.REDO;
             if (historyAction) {
+                // Keyboard-typed history is independent of the host's undo support.
+                Boolean journaled = journalHistory(editor, connection, expected, action == EditorAction.UNDO);
+                if (journaled != null) return journaled;
                 // Once this journal has undone a replacement, only redo that exact transaction.
                 if (transaction != null) {
                     if ((action == EditorAction.UNDO) == transaction.undone) return false;
@@ -285,6 +288,40 @@ public final class EditorActionSession {
         localUndo = true;
         edit.undone = !edit.undone;
         return true;
+    }
+
+    /** Null when the keyboard journal cannot act; the caller keeps the existing paths. */
+    private Boolean journalHistory(Editor editor, InputConnection connection, long expected, boolean isUndo) {
+        if (!editor.allowSnapshots()) return null;
+        JournalingInputConnection wrapper = JournalingInputConnection.forConnection(connection);
+        if (wrapper == null) return null;
+        InputConnection raw = wrapper.raw;
+        ImeEditJournal.State state = wrapper.state();
+        ImeEditJournal.Edit edit = state == null ? null
+                : isUndo ? wrapper.journal.peekUndo(state) : wrapper.journal.peekRedo(state);
+        if (edit == null || !current(editor, connection, expected)) return null;
+        // The journal owns this state now; an older paste transaction must not replay over it.
+        clearHistory();
+        ImeEditJournal.State target = ImeEditJournal.target(state, edit, isUndo);
+        int from = edit.offset;
+        int to = isUndo ? edit.insertedEnd() : edit.removedEnd();
+        String replacement = isUndo ? edit.removed : edit.inserted;
+        boolean batch = false;
+        try {
+            // Raw connection: reversing must not be recorded as a new keyboard edit.
+            raw.beginBatchEdit();
+            batch = true;
+            raw.finishComposingText();
+            if (!raw.setSelection(from, to) || !raw.commitText(replacement, 1)
+                    || !raw.setSelection(target.start, target.end)) {
+                wrapper.journal.clear();
+                return false;
+            }
+        } finally {
+            if (batch) raw.endBatchEdit();
+        }
+        ImeEditJournal.State observed = wrapper.state();
+        return current(editor, connection, expected) && wrapper.journal.applied(edit, isUndo, target, observed);
     }
 
     private boolean setOwnSelection(InputConnection connection, int start, int end) {

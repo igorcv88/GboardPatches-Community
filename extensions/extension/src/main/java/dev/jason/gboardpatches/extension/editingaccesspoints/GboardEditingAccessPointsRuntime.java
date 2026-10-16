@@ -12,6 +12,7 @@ public final class GboardEditingAccessPointsRuntime {
     private static WeakReference<InputMethodService> service = new WeakReference<>(null);
     // Keep the adapter alive, but never retain the service or its InputConnection strongly.
     private static EditorActionSession.Editor editor;
+    private static boolean journalReported;
 
     private GboardEditingAccessPointsRuntime() {}
 
@@ -27,6 +28,21 @@ public final class GboardEditingAccessPointsRuntime {
         }
     }
 
+    /** Patched InputMethodService.getCurrentInputConnection() override. */
+    public static android.view.inputmethod.InputConnection wrapInputConnection(
+            android.view.inputmethod.InputConnection connection) {
+        return JournalingInputConnection.wrap(connection);
+    }
+
+    /** Master switch for the current input service; false without an active service. */
+    public static boolean featureEnabled() {
+        try {
+            InputMethodService current = service.get();
+            return current != null && GboardEditingAccessPointsSettings.read(
+                    GboardPatchesSettings.preferences(current), GboardEditingAccessPointsSettings.ENABLED);
+        } catch (Throwable ignored) { return false; }
+    }
+
     public static void start(Object receiver) {
         end();
         try {
@@ -36,7 +52,9 @@ public final class GboardEditingAccessPointsRuntime {
                 editor = new EditorActionSession.Editor() {
                     @Override public android.view.inputmethod.InputConnection connection() {
                         InputMethodService current = reference.get();
-                        return current == null ? null : current.getCurrentInputConnection();
+                        // The patched service returns the journaling wrapper; actions use the editor's own connection.
+                        return current == null ? null
+                                : JournalingInputConnection.unwrap(current.getCurrentInputConnection());
                     }
                     @Override public boolean allowSnapshots() {
                         InputMethodService current = reference.get();
@@ -53,6 +71,15 @@ public final class GboardEditingAccessPointsRuntime {
                     }
                 };
                 SESSION.begin(editor);
+                boolean record = enabled(ime, EditorAction.UNDO) && editor.allowSnapshots();
+                JournalingInputConnection.setPolicy(() -> record);
+                if (record && !journalReported) {
+                    android.view.inputmethod.InputConnection current = ime.getCurrentInputConnection();
+                    if (current != null && !(current instanceof JournalingInputConnection)) {
+                        journalReported = true;
+                        android.util.Log.w("GboardPatches", "Undo journal inactive: service connection is not wrapped");
+                    }
+                }
             }
         } catch (Throwable ignored) {
             end();
@@ -60,6 +87,8 @@ public final class GboardEditingAccessPointsRuntime {
     }
 
     public static void end() {
+        JournalingInputConnection.setPolicy(null);
+        JournalingInputConnection.resetAll();
         dev.jason.gboardpatches.extension.quicktoolbar.QuickToolbar1803Runtime.reset();
         SESSION.end();
         service.clear();
@@ -99,7 +128,8 @@ public final class GboardEditingAccessPointsRuntime {
         try {
             InputMethodService current = service.get();
             if (current == null || Looper.myLooper() != Looper.getMainLooper()
-                    || current.getCurrentInputConnection() != connection) return null;
+                    || JournalingInputConnection.unwrap(current.getCurrentInputConnection())
+                            != JournalingInputConnection.unwrap(connection)) return null;
             for (EditorAction action : EditorAction.values()) {
                 if (action.contextMenuId == actionId) return SESSION.execute(action);
             }

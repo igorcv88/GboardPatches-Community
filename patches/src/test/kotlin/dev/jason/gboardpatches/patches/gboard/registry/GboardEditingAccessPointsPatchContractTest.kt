@@ -32,5 +32,7 @@ class GboardEditingAccessPointsPatchContractTest {
             RuntimeAbiCatalog.abi(RuntimeCallId.EDITING_ACCESS_POINTS_SELECTION_UPDATED).descriptor)
         assertEquals("()V",
             RuntimeAbiCatalog.abi(RuntimeCallId.EDITING_ACCESS_POINTS_END).descriptor)
+        assertEquals("(Landroid/view/inputmethod/InputConnection;)Landroid/view/inputmethod/InputConnection;",
+            RuntimeAbiCatalog.abi(RuntimeCallId.EDITING_ACCESS_POINTS_WRAP_INPUT_CONNECTION).descriptor)
     }
 }
