@@ -33,13 +33,20 @@ public final class ImePerformanceMetrics {
     }
     public static void count(Event event) { if (enabled) counts.incrementAndGet(event.ordinal()); }
     public static void reportAndReset() {
-        if (!enabled) return;
-        StringBuilder result=new StringBuilder("IME timings (ns):");
-        for (Event event:Event.values()) {
-            int i=event.ordinal(); long count=counts.getAndSet(i,0), total=totals.getAndSet(i,0), max=maxima.getAndSet(i,0);
-            if (count>0) result.append(' ').append(event.name()).append("[n=").append(count)
-                    .append(",total=").append(total).append(",max=").append(max).append(']');
+        // A disabled session must still discard measurements from an earlier
+        // enabled session; never carry them into a later comparison.
+        boolean shouldLog = enabled;
+        StringBuilder result = shouldLog ? new StringBuilder("IME timings (ns):") : null;
+        for (Event event : Event.values()) {
+            int i = event.ordinal();
+            long count = counts.getAndSet(i, 0);
+            long total = totals.getAndSet(i, 0);
+            long max = maxima.getAndSet(i, 0);
+            if (shouldLog && count > 0) {
+                result.append(' ').append(event.name()).append("[n=").append(count)
+                        .append(",total=").append(total).append(",max=").append(max).append(']');
+            }
         }
-        Log.i("GboardPatchesPerf",result.toString());
+        if (shouldLog) Log.i("GboardPatchesPerf", result.toString());
     }
 }
