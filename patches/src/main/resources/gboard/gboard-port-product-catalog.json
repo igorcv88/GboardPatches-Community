@@ -334,6 +334,7 @@
         "patches/src/main/kotlin/dev/jason/gboardpatches/patches/gboard/features/clipboard/GboardClipboardPatchOptions.kt",
         "patches/src/main/kotlin/dev/jason/gboardpatches/patches/gboard/features/clipboard/GboardClipboardPatchValidation.kt",
         "patches/src/main/kotlin/dev/jason/gboardpatches/patches/gboard/features/clipboard/GboardClipboardPrunePatch.kt",
+        "patches/src/main/kotlin/dev/jason/gboardpatches/patches/gboard/features/clipboard/GboardClipboardSearch1803Patch.kt",
         "patches/src/main/kotlin/dev/jason/gboardpatches/patches/gboard/registry/GboardPatchRegistry.kt"
       ],
       "contributions": [
@@ -349,7 +350,10 @@
             "CLIPBOARD_RUNTIME_BEFORE_ITEM_BIND",
             "CLIPBOARD_RUNTIME_HANDLE_CUSTOM_PRUNE",
             "CLIPBOARD_RUNTIME_MAYBE_BUILD_LOADER_RESULT",
-            "CLIPBOARD_RUNTIME_RESOLVE_COLUMN_COUNT_OVERRIDE"
+            "CLIPBOARD_RUNTIME_RESOLVE_COLUMN_COUNT_OVERRIDE",
+            "CLIPBOARD_SEARCH_OPENED",
+            "CLIPBOARD_SEARCH_CLOSED",
+            "CLIPBOARD_SEARCH_CHANGED"
           ]
         }
       ]

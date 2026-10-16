@@ -101,14 +101,17 @@ public final class GboardClipboardRuntime {
 
     public static void afterAdapterTrim(Object receiver) {
         UI_HOOK_ADAPTER.afterAdapterTrim(receiver);
+        ClipboardSearch1803Runtime.changed(receiver);
     }
 
     public static void beforeItemBind(Object receiver, Object holderObject, int position) {
+        ClipboardSearch1803Runtime.beforeBind(receiver, holderObject, position);
         UI_HOOK_ADAPTER.beforeItemBind(receiver, holderObject, position);
     }
 
     public static void afterItemBind(Object receiver, Object holderObject, int position) {
         UI_HOOK_ADAPTER.afterItemBind(receiver, holderObject, position);
+        ClipboardSearch1803Runtime.afterBind(receiver, holderObject, position);
     }
 
     public static Integer resolveColumnCountOverride(Object receiver) {
