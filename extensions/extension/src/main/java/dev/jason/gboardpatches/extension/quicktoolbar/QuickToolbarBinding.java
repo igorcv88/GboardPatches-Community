@@ -25,6 +25,7 @@ public final class QuickToolbarBinding implements AutoCloseable {
     private final Arrow arrow;
     private boolean decorated, closed;
     private QuickToolbarState.Mode renderedMode;
+    private int renderedLayoutDirection = -1;
 
     public QuickToolbarBinding(View button, View content, int color, Favorites favorites) {
         this.button = button; this.content = content; this.favorites = favorites;
@@ -68,8 +69,11 @@ public final class QuickToolbarBinding implements AutoCloseable {
 
     private void render() {
         QuickToolbarState.Mode mode = state.mode();
-        if (mode == renderedMode) return;
+        int direction = button.getLayoutDirection();
+        if (mode == renderedMode && (mode == QuickToolbarState.Mode.STOCK_TOOLBAR
+                || direction == renderedLayoutDirection)) return;
         renderedMode = mode;
+        renderedLayoutDirection = direction;
         if (state.mode() == QuickToolbarState.Mode.STOCK_TOOLBAR) {
             if (decorated) {
                 content.setVisibility(originalVisibility);
