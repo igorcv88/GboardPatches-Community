@@ -62,6 +62,18 @@ public class ClipboardSearchSurfaceTest {
         assertEquals(1, closes[0]);
     }
 
+    @Test public void visibleQueryIsBoundedLikeTheSearchedQuery() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        EditText field = new EditText(activity);
+        new ClipboardSearchSurface(activity, field, 600, ClipboardSearchController.forImeMainThread(),
+                new ClipboardSearchSurface.Listener() {
+                    public void onPick(ClipboardSearchSurface.Clip clip) { }
+                    public void onClose() { }
+                });
+        field.setText("a".repeat(ClipboardSearchMatcher.MAX_QUERY_LENGTH + 50));
+        assertEquals(ClipboardSearchMatcher.MAX_QUERY_LENGTH, field.length());
+    }
+
     @Test public void closeClearsQueryDetachesFieldAndIgnoresLateClicks() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         EditText field = new EditText(activity);

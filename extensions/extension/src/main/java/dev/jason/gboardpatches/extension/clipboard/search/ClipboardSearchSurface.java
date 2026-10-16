@@ -95,7 +95,14 @@ public final class ClipboardSearchSurface extends LinearLayout {
             public void onTextChanged(CharSequence s, int start, int before, int count) { search(s.toString()); }
             public void afterTextChanged(Editable text) {}
         };
-        if (field instanceof TextView text) text.addTextChangedListener(watcher);
+        if (field instanceof TextView text) {
+            // The visible query must be exactly what is searched: bound it like the worker does.
+            android.text.InputFilter[] current = text.getFilters();
+            android.text.InputFilter[] filters = java.util.Arrays.copyOf(current, current.length + 1);
+            filters[current.length] = new android.text.InputFilter.LengthFilter(ClipboardSearchMatcher.MAX_QUERY_LENGTH);
+            text.setFilters(filters);
+            text.addTextChangedListener(watcher);
+        }
     }
 
     /** Snapshot in native order; the worker never sees view or model objects. */
