@@ -536,6 +536,7 @@
         "patches/src/main/kotlin/dev/jason/gboardpatches/patches/gboard/features/editingaccesspoints/GboardEditingAccessPoints1803Targets.kt",
         "patches/src/main/kotlin/dev/jason/gboardpatches/patches/gboard/features/editingaccesspoints/GboardEditingAccessPointsFeatureMarkerPatch.kt",
         "patches/src/main/kotlin/dev/jason/gboardpatches/patches/gboard/features/editingaccesspoints/GboardEditingAccessPointsLifecyclePatch.kt",
+        "patches/src/main/kotlin/dev/jason/gboardpatches/patches/gboard/features/editingaccesspoints/GboardNativeClipboardPastePatch.kt",
         "patches/src/main/kotlin/dev/jason/gboardpatches/patches/gboard/registry/GboardPatchRegistry.kt",
         "patches/src/main/kotlin/dev/jason/gboardpatches/patches/gboard/shared/accesspoint/GboardAccessPointContributions1803Patch.kt",
         "patches/src/main/kotlin/dev/jason/gboardpatches/patches/gboard/shared/accesspoint/GboardAccessPointContributions1803Targets.kt"
@@ -552,7 +553,10 @@
             "ACCESS_POINT_CONTRIBUTIONS_1803_INCLUDE_ORDER_CATALOG",
             "EDITING_ACCESS_POINTS_START",
             "EDITING_ACCESS_POINTS_END",
-            "EDITING_ACCESS_POINTS_SELECTION_UPDATED"
+            "EDITING_ACCESS_POINTS_SELECTION_UPDATED",
+            "EDITING_NATIVE_CLIPBOARD_ATTEMPT",
+            "EDITING_NATIVE_CLIPBOARD_BEFORE_TEXT",
+            "EDITING_NATIVE_CLIPBOARD_AFTER_TEXT"
           ]
         }
       ]

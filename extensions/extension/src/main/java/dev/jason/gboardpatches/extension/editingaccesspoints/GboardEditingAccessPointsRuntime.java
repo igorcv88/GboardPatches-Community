@@ -71,6 +71,28 @@ public final class GboardEditingAccessPointsRuntime {
         } catch (Throwable ignored) { SESSION.end(); }
     }
 
+    public static void beforeNativeClipboardCard() {
+        try {
+            if (Looper.myLooper() == Looper.getMainLooper()) SESSION.nativeClipboardAttempt();
+        } catch (Throwable ignored) { }
+    }
+
+    public static void beforeNativeClipboardText(String text) {
+        try {
+            if (Looper.myLooper() != Looper.getMainLooper()
+                    || !enabled(service.get(), EditorAction.UNDO)) return;
+            long token = SESSION.beginNativePaste(text);
+            if (token != 0) new android.os.Handler(Looper.getMainLooper())
+                    .postDelayed(() -> SESSION.expireNativePaste(token), 1500);
+        } catch (Throwable ignored) { /* Capture is optional; leave stock insertion untouched. */ }
+    }
+
+    public static void afterNativeClipboardText() {
+        try {
+            if (Looper.myLooper() == Looper.getMainLooper()) SESSION.observeNativePaste();
+        } catch (Throwable ignored) { /* The selection observer may confirm a queued dispatch. */ }
+    }
+
     /** Null means no active shared session; callers may then use their existing native path. */
     public static Boolean executeForConnection(android.view.inputmethod.InputConnection connection, int actionId) {
         try {

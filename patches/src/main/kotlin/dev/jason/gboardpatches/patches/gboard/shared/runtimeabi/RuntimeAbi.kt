@@ -1,6 +1,9 @@
 package dev.jason.gboardpatches.patches.gboard.shared.runtimeabi
 
 internal enum class RuntimeCallId(internal val encodedAbi: String) {
+    EDITING_NATIVE_CLIPBOARD_ATTEMPT("Ldev/jason/gboardpatches/extension/editingaccesspoints/GboardEditingAccessPointsRuntime;->beforeNativeClipboardCard()V"),
+    EDITING_NATIVE_CLIPBOARD_BEFORE_TEXT("Ldev/jason/gboardpatches/extension/editingaccesspoints/GboardEditingAccessPointsRuntime;->beforeNativeClipboardText(Ljava/lang/String;)V"),
+    EDITING_NATIVE_CLIPBOARD_AFTER_TEXT("Ldev/jason/gboardpatches/extension/editingaccesspoints/GboardEditingAccessPointsRuntime;->afterNativeClipboardText()V"),
     EDITING_ACCESS_POINTS_SELECTION_UPDATED("Ldev/jason/gboardpatches/extension/editingaccesspoints/GboardEditingAccessPointsRuntime;->onSelectionUpdated(IIII)V"),
     EDITING_ACCESS_POINTS_START("Ldev/jason/gboardpatches/extension/editingaccesspoints/GboardEditingAccessPointsRuntime;->start(Ljava/lang/Object;)V"),
     EDITING_ACCESS_POINTS_END("Ldev/jason/gboardpatches/extension/editingaccesspoints/GboardEditingAccessPointsRuntime;->end()V"),
