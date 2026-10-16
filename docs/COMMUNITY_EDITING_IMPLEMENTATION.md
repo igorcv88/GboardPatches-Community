@@ -1,5 +1,7 @@
 # Native editing actions — implementation and validation
 
+Latest native-card implementation and remaining UI/build gates: [2026-10-16 progress](COMMUNITY_NATIVE_BINDINGS_2026-10-16.md). The toolbar-only scope below records the earlier PR #1 state.
+
 Baseline: `6f8064acb366919213df2e1d6c1c21df24baad7c` (Gboard Patches 3.12.0).
 
 The native AP contribution now registers six independent tokens, including `text_edit_undo` and `text_edit_redo`. Existing four stock resource IDs are preserved. Two bundled Material vector drawables are merged by the editing resource patch and resolved by resource name after installation, without guessing IDs in Gboard. Settings enumerate the same six actions; existing preference keys stay valid.

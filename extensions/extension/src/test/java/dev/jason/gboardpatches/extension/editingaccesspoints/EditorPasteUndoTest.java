@@ -153,4 +153,80 @@ public class EditorPasteUndoTest {
         h.onRead = s::end;
         assertFalse(s.execute(EditorAction.PASTE)); assertEquals(0, h.nativeCalls);
     }
+    @Test public void nativeCardDispatchWaitsForExactObservedReplacement() {
+        Host h=new Host(); EditorActionSession s=new EditorActionSession();s.begin(h);
+        String before=h.text;
+        assertTrue(s.beginNativePaste(h.clip)>0);
+        s.observeNativePaste(); // Native event is queued; no insertion yet.
+        h.replace(h.clip);
+        s.onSelectionUpdated(h.start,h.end,-1,-1);
+        String after=h.text;
+        h.nativeNoOp=false; // Would mutate asynchronously/unexpectedly if host undo were sent.
+        assertTrue(s.execute(EditorAction.UNDO));assertEquals(before,h.text);
+        assertTrue(s.execute(EditorAction.REDO));assertEquals(after,h.text);
+        assertEquals(2,h.commits);
+        assertEquals(0,h.nativeCalls);
+    }
+    @Test public void sequentialNativeCardsJournalOnlyTheLatestReplacement() {
+        Host h=new Host(); EditorActionSession s=new EditorActionSession();s.begin(h);
+        s.beginNativePaste("first😃\n");h.replace("first😃\n");s.observeNativePaste();
+        String first=h.text;
+        s.beginNativePaste("second");h.replace("second");s.observeNativePaste();
+        String second=h.text;
+        assertTrue(s.execute(EditorAction.UNDO));assertEquals(first,h.text);
+        assertTrue(s.execute(EditorAction.REDO));assertEquals(second,h.text);
+    }
+    @Test public void nativeCardSelectionAndExpiryAreSessionBound() {
+        Host h=new Host();h.start=10;h.end=7;
+        EditorActionSession s=new EditorActionSession();s.begin(h);
+        String before=h.text;
+        long first=s.beginNativePaste("one");
+        long second=s.beginNativePaste("two");s.expireNativePaste(first);
+        h.replace("two");s.observeNativePaste();s.expireNativePaste(second);
+        assertTrue(s.execute(EditorAction.UNDO));assertEquals(before,h.text);
+        assertEquals(10,h.start);assertEquals(7,h.end);
+    }
+    @Test public void unprovenNativeMutationAndCompositionNeverGainFallback() {
+        for(int mode=0;mode<5;mode++) {
+            Host h=new Host();EditorActionSession s=new EditorActionSession();s.begin(h);
+            long token=s.beginNativePaste("expected");
+            if(mode==0)h.replace("different");
+            if(mode==1){h.start=h.end=0;h.replace("expected");}
+            if(mode==2){s.onSelectionUpdated(h.start,h.end,0,h.start);h.replace("expected");}
+            if(mode==3){s.expireNativePaste(token);h.replace("expected");}
+            if(mode==4){s.end();s.begin(h);h.replace("expected");}
+            s.observeNativePaste();String current=h.text;
+            assertFalse(s.execute(EditorAction.UNDO));assertEquals(current,h.text);assertEquals(0,h.commits);
+        }
+    }
+    @Test public void privatePartialAndLongNativeCardsRemainNative() {
+        for(int mode=0;mode<4;mode++) {
+            Host h=new Host();h.privateField=mode==0;h.partial=mode==1;
+            if(mode==2)h.text="x".repeat(32769);
+            String clip=mode==3?"x".repeat(32769):"clip";
+            EditorActionSession s=new EditorActionSession();s.begin(h);
+            assertEquals(0,s.beginNativePaste(clip));
+            h.replace(clip);s.observeNativePaste();
+            s.execute(EditorAction.UNDO);assertEquals(0,h.commits);
+        }
+    }
+    @Test public void typingAfterNativeCardCannotBeUndoneByTheCardJournal() {
+        Host h=new Host();EditorActionSession s=new EditorActionSession();s.begin(h);
+        s.beginNativePaste("clip");h.replace("clip");s.observeNativePaste();
+        h.replace("typed");String text=h.text;
+        assertFalse(s.execute(EditorAction.UNDO));assertEquals(text,h.text);assertEquals(0,h.commits);
+    }
+
+    @Test public void imageCardAttemptCannotReverseAnOlderTextPaste() {
+        Host h=new Host();EditorActionSession s=new EditorActionSession();s.begin(h);
+        s.execute(EditorAction.PASTE);s.nativeClipboardAttempt();
+        assertFalse(s.execute(EditorAction.UNDO));assertEquals(0,h.commits);
+    }
+    @Test public void pendingCardIsCancelledByExternalCursorCallbackEvenIfExtractionLags() {
+        Host h=new Host();EditorActionSession s=new EditorActionSession();s.begin(h);
+        s.beginNativePaste("clip");s.onSelectionUpdated(0,0,-1,-1);
+        h.replace("clip");s.observeNativePaste();
+        assertFalse(s.execute(EditorAction.UNDO));assertEquals(0,h.commits);
+    }
+
 }

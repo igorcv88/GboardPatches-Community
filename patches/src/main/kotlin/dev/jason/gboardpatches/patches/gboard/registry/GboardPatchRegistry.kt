@@ -3,6 +3,7 @@ package dev.jason.gboardpatches.patches.gboard.registry
 import app.morphe.patcher.patch.Patch
 import dev.jason.gboardpatches.patches.gboard.features.editingaccesspoints.gboardEditingAccessPointsFeatureMarkerPatch
 import dev.jason.gboardpatches.patches.gboard.features.editingaccesspoints.gboardEditingAccessPointsLifecyclePatch
+import dev.jason.gboardpatches.patches.gboard.features.editingaccesspoints.gboardNativeClipboardPastePatch
 import app.morphe.patcher.patch.ResourcePatchBuilder
 import app.morphe.patcher.patch.resourcePatch
 import app.morphe.patcher.patch.stringOption
@@ -215,6 +216,7 @@ val gboardEditingAccessPointsPatch = gboardPublicResourcePatch(
         gboardPatchesSettingsPatch,
         gboardEditingAccessPointsFeatureMarkerPatch,
         gboardEditingAccessPointsLifecyclePatch,
+        gboardNativeClipboardPastePatch,
         gboardAccessPointContributions1803Patch,
     )
 }

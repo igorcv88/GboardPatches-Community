@@ -24,6 +24,9 @@ public final class EditorActionSession {
     private Snapshot original, pasted;
     private boolean localUndo;
     private boolean dispatching;
+    private PendingPaste pendingPaste;
+    private long pasteSequence;
+    private boolean composing;
     private final List<int[]> pendingOwnSelections = new ArrayList<>();
 
     public void begin(Editor editor) {
@@ -35,9 +38,11 @@ public final class EditorActionSession {
         generation++;
         active.clear();
         clearHistory();
+        composing = false;
     }
 
     private void clearHistory() {
+        pendingPaste = null;
         pendingOwnSelections.clear();
         transaction = null;
         localUndo = false;
@@ -46,6 +51,17 @@ public final class EditorActionSession {
     }
 
     public void onSelectionUpdated(int start, int end, int candidateStart, int candidateEnd) {
+        composing = candidateStart >= 0 || candidateEnd >= 0;
+        if (pendingPaste != null) {
+            if (composing) clearHistory();
+            else {
+                PendingPaste pending = pendingPaste;
+                observeNativePaste();
+                if (pendingPaste == pending && (start != pending.before.start || end != pending.before.end)) {
+                    clearHistory();
+                }
+            }
+        }
         if (transaction == null || dispatching) return;
         Snapshot expected = transaction.undone ? original : pasted;
         if (candidateStart >= 0 || candidateEnd >= 0) { clearHistory(); return; }
@@ -75,6 +91,8 @@ public final class EditorActionSession {
     }
 
     public boolean execute(EditorAction action) {
+        observeNativePaste();
+        pendingPaste = null;
         Editor editor = active.get();
         long expected = generation;
         if (editor == null || action == null || dispatching) return false;
@@ -129,6 +147,83 @@ public final class EditorActionSession {
             return false;
         } finally {
             dispatching = false;
+        }
+    }
+
+    /** Any native card attempt invalidates older local history, including image/URI paths. */
+    public void nativeClipboardAttempt() {
+        clearHistory();
+    }
+
+    /** Called only immediately before the stock clipboard text-event dispatcher, never images. */
+    public long beginNativePaste(String text) {
+        observeNativePaste();
+        clearHistory();
+        if (dispatching || composing || text == null || text.isEmpty()
+                || text.length() > EditorEditTransaction.MAX_CHARACTERS) return 0;
+        Editor editor = active.get();
+        long expected = generation;
+        try {
+            if (editor == null || !editor.allowSnapshots()) return 0;
+            InputConnection connection = editor.connection();
+            Snapshot before = connection == null ? null : snapshot(connection);
+            if (before == null || !current(editor, connection, expected)) return 0;
+            int low = Math.min(before.start, before.end), high = Math.max(before.start, before.end);
+            if (before.text.length() - (high - low) + text.length()
+                    > EditorEditTransaction.MAX_CHARACTERS) return 0;
+            String after = before.text.subSequence(0, low).toString() + text
+                    + before.text.subSequence(high, before.text.length());
+            int cursor = low + text.length();
+            EditorEditTransaction edit = EditorEditTransaction.capture(before.text.toString(),
+                    before.start, before.end, after, cursor, cursor);
+            if (edit == null) return 0;
+            long token = ++pasteSequence;
+            pendingPaste = new PendingPaste(token, expected, editor, connection, before, edit);
+            return token;
+        } catch (Throwable ignored) { clearHistory(); return 0; }
+    }
+
+    /** A callback is only a signal: the entire bounded replacement must also be observed. */
+    public void observeNativePaste() {
+        PendingPaste pending = pendingPaste;
+        if (pending == null || dispatching) return;
+        try {
+            Editor editor = pending.editor.get();
+            InputConnection connection = pending.connection.get();
+            if (editor == null || connection == null || !editor.allowSnapshots()
+                    || !current(editor, connection, pending.generation)) { clearHistory(); return; }
+            Snapshot after = snapshot(connection);
+            if (pendingPaste != pending || !current(editor, connection, pending.generation)) return;
+            if (pending.before.same(after)) return; // Dispatch may still be queued.
+            clearHistory();
+            if (after != null && pending.edit.matches(after.text.toString(), after.start, after.end)) {
+                transaction = pending.edit;
+                original = pending.before;
+                pasted = after;
+                journalConnection = new WeakReference<>(connection);
+                // Native card insertion travels through an event bus. Host undo may also be
+                // asynchronous: never queue it and then issue a competing local inverse.
+                localUndo = true;
+            }
+        } catch (Throwable ignored) { clearHistory(); }
+    }
+
+    public void expireNativePaste(long token) {
+        if (pendingPaste != null && pendingPaste.token == token) clearHistory();
+    }
+
+    private static final class PendingPaste {
+        final long token, generation;
+        final WeakReference<Editor> editor;
+        final WeakReference<InputConnection> connection;
+        final Snapshot before;
+        final EditorEditTransaction edit;
+        PendingPaste(long token, long generation, Editor editor, InputConnection connection,
+                Snapshot before, EditorEditTransaction edit) {
+            this.token = token; this.generation = generation;
+            this.editor = new WeakReference<>(editor);
+            this.connection = new WeakReference<>(connection);
+            this.before = before; this.edit = edit;
         }
     }
 
