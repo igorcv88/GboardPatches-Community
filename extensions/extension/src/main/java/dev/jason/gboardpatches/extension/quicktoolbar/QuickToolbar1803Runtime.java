@@ -77,6 +77,7 @@ public final class QuickToolbar1803Runtime {
                 diagnose("controller bar is not a view");
                 clearBinding();
                 controller.clear(); manager.clear(); bar.clear();
+                scheduleRestore();
                 return;
             }
             // Replacing an adapter is not a user toggle or a new input session.
@@ -90,6 +91,7 @@ public final class QuickToolbar1803Runtime {
             bar = new WeakReference<>(nativeView);
             Object candidates = candidateOwner.get();
             if (candidates != null) onCandidates(candidates);
+            scheduleRestore();
         } catch (Throwable failure) { diagnose("controller binding failed: " + failure.getClass().getSimpleName()); clearBinding(); }
     }
 

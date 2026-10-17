@@ -147,4 +147,17 @@ public class QuickToolbar1803RuntimeBindingTest {
         } finally { f.clear(); }
     }
 
+    @Test public void controllerWithoutReadyViewReconcilesWithoutWaitingForAnotherCandidateList() throws Exception {
+        Fixture f = new Fixture();
+        try {
+            f.tap();
+            QuickToolbar1803Runtime.onControllerView(new QuickToolbar1803FallbackTest.NonViewController());
+            f.idle();
+            assertEquals(2, f.count("shown"));
+            f.tap(); f.idle();
+            assertEquals(1, f.count("hidden"));
+            assertEquals(2, f.count("shown"));
+        } finally { f.clear(); }
+    }
+
 }

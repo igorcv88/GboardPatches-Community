@@ -23,11 +23,20 @@ are suppressed under applying, preventing recursion. At most one restoration is 
 The underlying native M method remains reflective; a successful invocation is not proof
 that pixels are visible. Device acceptance remains required.
 
+## Additional native lifecycle evidence
+
+In original Lmlh.M(View)V (DEX code offset 0x2affac), field y stores the incoming root,
+field o is reset false, and j is the result of findViewById(2131427494), cast to Lmhm.
+It is a View when non-null; the "not a view" log does not establish an intermediate wrapper.
+A missing/unready native view is enough to explain that log. Reconciliation is therefore
+also queued after controller replacement, even without a new candidate-list callback.
+No view traversal or guessed wrapper field is added.
+
 ## Verification
 
 ECJ Java 17 compilation of editing/toolbar/search runtime and tests against Android framework
 classes passed. An isolated JUnit/Robolectric 4.14.1 harness ran the existing editing,
-toolbar and clipboard-search suites plus four new runtime transition regressions: 121 tests
+toolbar and clipboard-search suites plus five new runtime transition regressions: 122 tests
 passed. Includes fallback-to-bound P2, detach/recreate, bound-to-fallback, empty candidates,
 five sequential history actions, coalescing, explicit close, session reset, disable, and
 out-of-order candidate owner callbacks. Pure Python tools suite: see execution report.
