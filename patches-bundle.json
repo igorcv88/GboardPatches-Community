@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-10-16T18:35:14",
-  "description": "### Gboard\n\nGboardPatches Community 3.12.3\n\nCommit: `c0b3e7ab27cb5541a07cd710b32ddc5ead74a00d`\n\nSix independent native editing Access Points: Select All, Copy, Cut, Paste, Undo and Redo.\n\nA bounded, session-only journal supplies reversible toolbar Paste/Cut when the editor's native undo is an observed no-op. Host typing and external pastes use the host's undo manager. Password/private fields, incomplete extraction and active composition do not enter the local journal.\n\nContextual favorites and native clipboard search currently have tested policy/search components only. Their 18.0.3 UI hooks are pending binary mapping; these interfaces are not enabled by this change. Retention limits, themes and the existing clipboard remain unchanged.\n\nDevice validation of the new editing actions remains pending on Gboard 18.0.3. This bundle does not add 18.5.1 support.\n",
-  "download_url": "https://github.com/igorcv88/GboardPatches-Community/releases/download/v3.12.3/patches-3.12.3.mpp",
+  "created_at": "2026-10-17T12:15:35",
+  "description": "### Gboard\n\nGboardPatches Community 3.12.4\n\nCommit: `b0cf301af63cdd5b673cf82762d89e8b9c34da45`\n\nSix independent native editing Access Points: Select All, Copy, Cut, Paste, Undo and Redo.\n\nA bounded, session-only journal supplies reversible toolbar Paste/Cut when the editor's native undo is an observed no-op. Host typing and external pastes use the host's undo manager. Password/private fields, incomplete extraction and active composition do not enter the local journal.\n\nContextual favorites and native clipboard search currently have tested policy/search components only. Their 18.0.3 UI hooks are pending binary mapping; these interfaces are not enabled by this change. Retention limits, themes and the existing clipboard remain unchanged.\n\nDevice validation of the new editing actions remains pending on Gboard 18.0.3. This bundle does not add 18.5.1 support.\n",
+  "download_url": "https://github.com/igorcv88/GboardPatches-Community/releases/download/v3.12.4/patches-3.12.4.mpp",
   "signature_download_url": "",
-  "version": "3.12.3"
+  "version": "3.12.4"
 }
