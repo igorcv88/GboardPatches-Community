@@ -4,6 +4,7 @@ import android.content.res.TypedArray;
 import android.content.SharedPreferences;
 import java.util.concurrent.ConcurrentHashMap;
 import android.os.Looper;
+import android.os.Handler;
 import android.view.View;
 import android.view.ViewGroup;
 import java.lang.ref.WeakReference;
@@ -39,6 +40,10 @@ public final class QuickToolbar1803Runtime {
     };
     /** Favorites shown by the event fallback, without the arrow binding on the button. */
     private static boolean fallbackShown;
+    /** The native manager may remain valid when an AP controller binding is unavailable. */
+    private static WeakReference<Object> fallbackManager = new WeakReference<>(null);
+    /** Prevent callbacks posted before a toggle/session reset from restoring a closed row. */
+    private static long fallbackRevision;
     private static final java.util.Set<String> REPORTED = ConcurrentHashMap.newKeySet();
     private QuickToolbar1803Runtime() {}
 
@@ -61,13 +66,24 @@ public final class QuickToolbar1803Runtime {
         try {
             Object nativeBar = field(value, "j");
             if (controller.get() == value && bar.get() == nativeBar) return;
+            // The 18.0.3 controller does not always expose a View at field j.
+            // A failed binding must not erase the active fallback or its candidate state.
+            if (!(nativeBar instanceof View nativeView)) {
+                diagnose("controller bar is not a view");
+                clearBinding();
+                controller.clear(); manager.clear(); bar.clear();
+                return;
+            }
             // Leso can deliver candidates before the new AP controller is attached.
-            // Preserve the pending owner across clear() and let onCandidates()
-            // validate that its view belongs to the new controller's root.
             Object pendingOwner = candidateOwner.get();
             boolean pendingNonempty = candidateListNonempty;
+            Object pendingFallbackManager = fallbackManager.get();
+            boolean keepFallback = fallbackShown && pendingFallbackManager != null;
             clear();
-            if (!(nativeBar instanceof View nativeView)) { diagnose("controller bar is not a view"); return; }
+            if (keepFallback) {
+                fallbackShown = true;
+                fallbackManager = new WeakReference<>(pendingFallbackManager);
+            }
             if (pendingOwner != null) {
                 candidateOwner = new WeakReference<>(pendingOwner);
                 candidateListNonempty = pendingNonempty;
@@ -184,6 +200,8 @@ public final class QuickToolbar1803Runtime {
         // native row is visible by itself and the key must keep opening the full panel.
         if (fallbackShown) {
             fallbackShown = false;
+            fallbackManager.clear();
+            fallbackRevision++;
             if (favoritesVisible()) {
                 hideFavorites(nativeManager);
                 return true;
@@ -199,8 +217,27 @@ public final class QuickToolbar1803Runtime {
             return false;
         }
         fallbackShown = true;
+        fallbackManager = new WeakReference<>(nativeManager);
+        fallbackRevision++;
         diagnose("favorites shown by event fallback (no button binding)");
         return true;
+    }
+
+    /**
+     * A successful Undo/Redo can make Gboard redraw the native candidate row over the
+     * favorites. Reassert the *user-selected* favorites mode after the redraw, without
+     * changing input history or opening the full shortcuts panel.
+     */
+    public static void afterSuccessfulHistoryAction() {
+        if (!main() || !fallbackShown) return;
+        Object target = fallbackManager.get();
+        if (target == null) return;
+        long expectedRevision = fallbackRevision;
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (!fallbackShown || fallbackRevision != expectedRevision
+                    || target != fallbackManager.get() || !featureEnabled() || applying) return;
+            if (invokeShowFavorites(target)) diagnose("favorites restored after Undo/Redo");
+        }, 48L);
     }
 
     private static boolean favoritesVisible() {
@@ -305,10 +342,12 @@ public final class QuickToolbar1803Runtime {
     public static void reset() {
         if (!main()) return;
         // A new input session must not inherit the previous editor's suggestion state.
-        clearBinding(); fallbackShown = false; candidateOwner.clear(); candidateListNonempty = false;
+        clearBinding(); fallbackShown = false; fallbackManager.clear(); fallbackRevision++;
+        candidateOwner.clear(); candidateListNonempty = false;
     }
     public static void clear() {
         clearBinding(); controller.clear(); manager.clear(); bar.clear(); fallbackShown = false;
+        fallbackManager.clear(); fallbackRevision++;
         candidateOwner.clear(); candidateListNonempty = false;
         if (preferences != null) preferences.unregisterOnSharedPreferenceChangeListener(SETTINGS_CHANGED);
         preferences = null;
