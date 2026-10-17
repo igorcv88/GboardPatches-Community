@@ -19,7 +19,7 @@ public class ClipboardNativeSearchSessionTest {
         public void hideSurface() { step("hide", true); }
         public boolean switchToAlphabet() { return step("alphabet", alphabet); }
         public boolean routeToField() { return step("route", routed); }
-        public void restoreRouting() { step("restore", true); }
+        public boolean restoreRouting() { return step("restore", !fail.equals("restore-false")); }
         public void returnToClipboard() { step("clipboard", true); }
         public boolean commitToEditor(String text) { return step("commit:" + text, true); }
     }
@@ -85,4 +85,15 @@ public class ClipboardNativeSearchSessionTest {
         assertEquals(List.of("restore", "hide"), host.calls);
         assertEquals(ClipboardNativeSearchSession.State.CLOSED, session.state());
     }
+    @Test public void failedOrThrowingRestoreMustNeverCommitIntoTheSearchProvider() {
+        for (String failure : List.of("restore", "restore-false")) {
+            Host host = new Host();
+            ClipboardNativeSearchSession session = new ClipboardNativeSearchSession(host);
+            assertTrue(session.open()); host.calls.clear(); host.fail = failure;
+            assertFalse(session.pick("must not be committed"));
+            assertEquals(List.of("restore", "hide"), host.calls);
+            assertFalse(session.pick("second tap"));
+        }
+    }
+
 }

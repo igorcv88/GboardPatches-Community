@@ -25,8 +25,14 @@ public class ClipboardNativeSearch1803HostTest {
     public static class Service extends InputMethodService implements Provider {
         final List<Object> providers = new ArrayList<>();
         final List<Boolean> resets = new ArrayList<>();
-        void Z(Provider provider, boolean reset) { providers.add(provider); resets.add(reset); }
+        boolean editor = true, ignoreRouting;
+        void Z(Provider provider, boolean reset) {
+            providers.add(provider); resets.add(reset);
+            if (!ignoreRouting) editor = provider == null;
+        }
+        protected boolean aA() { return editor; }
     }
+    public static class ChildService extends Service { }
     /** Mirrors EditTextOnKeyboard: a focusable Loqa view with its own lazily created connection. */
     public static class Field extends View implements Provider {
         Object connection = new Object();
@@ -47,12 +53,12 @@ public class ClipboardNativeSearch1803HostTest {
 
     @Test public void routesLikeJarvisAndRestoresWithTheNativeFinishInputViewCall() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        Service service = new Service();
+        Service service = new ChildService();
         Field field = attachedField(activity);
         ClipboardNativeSearch1803.Host host = new ClipboardNativeSearch1803.Host(service, field);
         assertTrue(host.routeToField());
         assertTrue(field.isFocused());
-        host.restoreRouting();
+        assertTrue(host.restoreRouting());
         // Z(field,false) then Z(null,false) ≡ Loup.aC(null,false,true) from onFinishInputView.
         assertEquals(java.util.Arrays.asList(field, null), service.providers);
         assertEquals(List.of(false, false), service.resets);
@@ -122,7 +128,7 @@ public class ClipboardNativeSearch1803HostTest {
             return true;
         }
         public boolean routeToField() { calls.add("route"); return true; }
-        public void restoreRouting() { calls.add("restore"); }
+        public boolean restoreRouting() { calls.add("restore"); return true; }
         public void returnToClipboard() { calls.add("clipboard"); }
         public boolean commitToEditor(String text) { calls.add("commit"); return true; }
     }
@@ -171,4 +177,13 @@ public class ClipboardNativeSearch1803HostTest {
         assertFalse(ClipboardNativeSearch1803.isOpen());
         assertTrue(service.providers.isEmpty()); // Alphabet switch is unbound: never routed.
     }
+    @Test public void nativeNoOpRoutingIsNotReportedAsSuccess() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        Service service = new Service(); service.ignoreRouting = true;
+        ClipboardNativeSearch1803.Host host = new ClipboardNativeSearch1803.Host(service, attachedField(activity));
+        assertFalse(host.routeToField());
+        service.editor = false;
+        assertFalse(host.restoreRouting());
+    }
+
 }

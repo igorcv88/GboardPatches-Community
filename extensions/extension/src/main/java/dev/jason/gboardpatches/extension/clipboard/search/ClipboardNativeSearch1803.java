@@ -226,13 +226,28 @@ public final class ClipboardNativeSearch1803 {
                 report("field", failure);
                 return false;
             }
-            return setProvider(field);
+            return setProvider(field) && Boolean.FALSE.equals(editorRouting());
         }
 
         /** Z(null, false) is aC(null, false, true): Loup's own onFinishInputView cleanup. */
-        @Override public void restoreRouting() {
-            setProvider(null);
+        @Override public boolean restoreRouting() {
+            boolean restored = setProvider(null) && Boolean.TRUE.equals(editorRouting());
             field.clearFocus();
+            return restored;
+        }
+
+        /** Loup.aA(): active Loqe v equals the editor provider r (18.0.3). */
+        private Boolean editorRouting() {
+            try {
+                for (Class<?> type = ime.getClass(); type != null; type = type.getSuperclass()) {
+                    try {
+                        Method check = type.getDeclaredMethod("aA");
+                        check.setAccessible(true);
+                        return (Boolean) check.invoke(ime);
+                    } catch (NoSuchMethodException ignored) { }
+                }
+                return null;
+            } catch (Throwable failure) { report("route-confirmation", failure); return null; }
         }
 
         @Override public void returnToClipboard() {

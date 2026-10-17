@@ -19,7 +19,7 @@ public final class ClipboardNativeSearchSession {
         /** Makes the search field the keyboard's input provider. */
         boolean routeToField();
         /** Makes the editor's own connection the input provider again. */
-        void restoreRouting();
+        boolean restoreRouting();
         /** Brings the native clipboard panel back (cancel path only). */
         void returnToClipboard();
         /** Commits a picked clip into the editor through the restored provider. */
@@ -63,40 +63,44 @@ public final class ClipboardNativeSearchSession {
     /** Restores the editor connection first, then commits exactly the picked clip. */
     public boolean pick(String text) {
         if (state != State.OPEN || text == null) return false;
-        close(false);
+        if (!close(false)) return false;
         try { return host.commitToEditor(text); }
         catch (Throwable ignored) { return false; }
     }
 
-    private void close(boolean backToClipboard) {
-        if (state != State.OPEN) return;
+    private boolean close(boolean backToClipboard) {
+        if (state != State.OPEN) return false;
         state = State.CLOSED;
         boolean switched = alphabet;
-        undo();
-        if (backToClipboard && switched) {
+        boolean restored = undo();
+        if (backToClipboard && switched && restored) {
             try { host.returnToClipboard(); } catch (Throwable ignored) { }
         }
+        return restored;
     }
 
     private boolean rollback() {
         boolean switched = alphabet;
-        undo();
-        if (switched) {
+        boolean restored = undo();
+        if (switched && restored) {
             try { host.returnToClipboard(); } catch (Throwable ignored) { }
         }
         state = State.CLOSED;
         return false;
     }
 
-    private void undo() {
+    private boolean undo() {
+        boolean restored = true;
         if (routed) {
             routed = false;
-            try { host.restoreRouting(); } catch (Throwable ignored) { }
+            try { restored = host.restoreRouting(); }
+            catch (Throwable ignored) { restored = false; }
         }
         if (surface) {
             surface = false;
             try { host.hideSurface(); } catch (Throwable ignored) { }
         }
         alphabet = false;
+        return restored;
     }
 }
