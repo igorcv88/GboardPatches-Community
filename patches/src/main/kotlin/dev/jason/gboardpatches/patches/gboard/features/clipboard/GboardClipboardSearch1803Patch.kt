@@ -16,7 +16,7 @@ internal val gboardClipboardSearch1803Patch = bytecodePatch(
     description = "Clipboard search on the native alphabet keyboard with results above it.",
 ) {
     compatibleWith(COMPATIBILITY_GBOARD)
-    dependsOn(gboardClipboardItemBindPatch)
+    dependsOn(gboardClipboardItemBindPatch, gboardTermuxClipboardDiagnosticsPatch)
     execute {
         findMutableMethodOrThrow(CLIPBOARD_KEYBOARD_CLASS, "e", "V",
             listOf("Landroid/view/inputmethod/EditorInfo;", "Ljava/lang/Object;"))
