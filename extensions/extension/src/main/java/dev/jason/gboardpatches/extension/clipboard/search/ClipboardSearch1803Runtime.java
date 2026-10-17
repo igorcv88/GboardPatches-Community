@@ -20,6 +20,7 @@ public final class ClipboardSearch1803Runtime {
     public static void opened(Object keyboard) {
         if (!main()) return;
         closeActive();
+        traceBackKey(keyboard);
         if (!ClipboardNativeSearch1803.available()) return; // Fails closed: no button.
         try {
             Object adapter = field(keyboard, "c");
@@ -38,6 +39,25 @@ public final class ClipboardSearch1803Runtime {
 
     /** Lfjk.M(Z): native list refresh. Snapshots are taken on demand, nothing to update. */
     public static void changed(Object adapter) { }
+
+    private static boolean traced;
+
+    /**
+     * Device trace for T1a, once per process and without clip content: the action code of the
+     * back-to-alphabet key (0x7f0b0521) as the panel shows it. Read-only.
+     */
+    private static void traceBackKey(Object keyboard) {
+        if (traced) return;
+        try {
+            Object listView = field(keyboard, "l");
+            if (!(listView instanceof View recycler)) return;
+            Object action = ClipboardNative1803.backKeyAction(recycler.getRootView());
+            Integer code = ClipboardNative1803.actionCode(action);
+            traced = true;
+            android.util.Log.i("GboardPatches", "Clipboard back-to-prime key: "
+                    + (action == null ? "absent" : action.getClass().getName() + " code=" + code));
+        } catch (Throwable ignored) { }
+    }
 
     private static void closeActive() {
         Session session = active; active = null;
@@ -95,7 +115,7 @@ public final class ClipboardSearch1803Runtime {
             ui = new ClipboardSearchUiAdapter(actions, this::search);
         }
         void search() {
-            try { ClipboardNativeSearch1803.open(recycler, snapshot(adapter)); }
+            try { ClipboardNativeSearch1803.open(keyboard, recycler, snapshot(adapter)); }
             catch (Throwable failure) { report("snapshot", failure); }
         }
         public void close() { ui.close(); }

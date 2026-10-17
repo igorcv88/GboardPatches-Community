@@ -74,6 +74,39 @@ public class ClipboardSearchSurfaceTest {
         assertEquals(ClipboardSearchMatcher.MAX_QUERY_LENGTH, field.length());
     }
 
+    @Test public void deleteNeedsLongPressThenAConfirmingTapAndIsOffUnlessEnabled() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        EditText field = new EditText(activity);
+        List<ClipboardSearchSurface.Clip> deleted = new ArrayList<>(), picked = new ArrayList<>();
+        ClipboardSearchSurface surface = new ClipboardSearchSurface(activity, field, 600,
+                ClipboardSearchController.forImeMainThread(), new ClipboardSearchSurface.Listener() {
+                    public void onPick(ClipboardSearchSurface.Clip clip) { picked.add(clip); }
+                    public void onClose() { }
+                    public void onDelete(ClipboardSearchSurface.Clip clip) { deleted.add(clip); }
+                });
+        activity.setContentView(surface);
+        ClipboardSearchSurface.Clip a = new ClipboardSearchSurface.Clip(1, R, "alpha");
+        ClipboardSearchSurface.Clip b = new ClipboardSearchSurface.Clip(2, R, "beta");
+        surface.setClips(List.of(a, b));
+        surface.results.getOnItemLongClickListener().onItemLongClick(surface.results, null, 0, 1);
+        assertEquals(Long.MIN_VALUE, surface.pendingDelete()); // Disabled by default.
+
+        surface.setDeleteEnabled(true);
+        surface.results.getOnItemLongClickListener().onItemLongClick(surface.results, null, 0, 1);
+        assertEquals(1L, surface.pendingDelete());
+        surface.results.performItemClick(null, 1, 2); // Another row only cancels.
+        assertTrue(deleted.isEmpty()); assertTrue(picked.isEmpty());
+        assertEquals(Long.MIN_VALUE, surface.pendingDelete());
+
+        surface.results.getOnItemLongClickListener().onItemLongClick(surface.results, null, 0, 1);
+        surface.results.performItemClick(null, 0, 1);
+        assertEquals(List.of(a), deleted);
+        assertTrue(picked.isEmpty());
+
+        surface.remove(1);
+        assertEquals(List.of(b), surface.visibleClips());
+    }
+
     @Test public void closeClearsQueryDetachesFieldAndIgnoresLateClicks() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         EditText field = new EditText(activity);

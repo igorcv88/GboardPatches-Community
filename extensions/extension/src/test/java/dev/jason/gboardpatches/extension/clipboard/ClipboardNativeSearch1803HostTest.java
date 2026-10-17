@@ -106,7 +106,7 @@ public class ClipboardNativeSearch1803HostTest {
     @Test public void searchCannotOpenWhileBindingsAreUnreviewed() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         assertFalse(ClipboardNativeSearch1803.available());
-        assertFalse(ClipboardNativeSearch1803.open(new View(activity), List.of()));
+        assertFalse(ClipboardNativeSearch1803.open(null, new View(activity), List.of()));
         assertFalse(ClipboardNativeSearch1803.isOpen());
     }
 
@@ -166,7 +166,8 @@ public class ClipboardNativeSearch1803HostTest {
         Service service = Robolectric.setupService(Service.class);
         Field field = new Field(service);
         assertFalse(ClipboardNativeSearch1803.start(service, field,
-                List.of(new ClipboardSearchSurface.Clip(1, ClipboardSearchController.Section.RECENT, "a"))));
+                List.of(new ClipboardSearchSurface.Clip(1, ClipboardSearchController.Section.RECENT, "a")),
+                new ClipboardNativeSearch1803.Host(service, field)));
         assertFalse(ClipboardNativeSearch1803.isOpen());
         assertTrue(service.providers.isEmpty()); // Alphabet switch is unbound: never routed.
     }

@@ -105,3 +105,36 @@ Superfície independente com as ações nativas (mover o `RecyclerView` 0x7f0b01
 - **T2 (`Loup.aC`):** o predicado que leva ao `Loup.C(Loqe;ZZ)V` em pc≈60–72 (corpo `throw null`). Se o roteamento para `EditTextOnKeyboard` puder satisfazê-lo, a troca lança `NullPointerException`. E o que `Loqe.n(null)` faz com o provedor anterior.
 - **T3 (aparelho):** com a busca aberta, `adb shell dumpsys input_method` (insets e região tocável) e o toque na superfície em retrato, paisagem e flutuante.
 - **T4 (apagar):** método persistente de exclusão de um `Lfih` em `Lfke`/`Lfjz`, que funcione sem o `ClipboardKeyboard` aberto. O mesmo vale para fixar/desafixar pelo controlador de dados, e não pelo `ClipboardKeyboard.Q`.
+
+## Extração T1/T2/T4 (16–17/10/2026) aplicada
+
+### T2 — roteamento e restauração com o despacho virtual correto
+
+`LatinIME extends Leqy extends Loup`. `Loup.C(Loqe;ZZ)V` (`throw null`) é stub; o `invoke-virtual` em `Loup.aC` pc=72 resolve para `Leqy.C` (0x42ba84), que grava `Loup.v` = o `Loqe` recebido e reaplica o contexto (`Loqe.c()` EditorInfo, `Looa`, `Lnvu/Lowq`, `Loto`).
+
+Fluxo de `aC` (0x2eedf8) aplicado aos dois passos da busca:
+
+| Chamada | Efeito em `aC` | `Leqy.C` |
+| --- | --- | --- |
+| `Z(campo,false)` | `Loup.t.n(campo)`; a conexão muda → pc=58 → `C(t, true, campo.dR())` | `Loup.v = t` (wrapper do campo) |
+| `Z(null,false)` (restauração) | `Loup.t.n(null)` (fecha o campo via `dH()`); `v3=0`; `Loup.v` (= `t`) ≠ `Loup.r` → pc=72 → `C(r, true, false)` | `Loup.v = r` (wrapper do serviço/editor) |
+
+Ou seja, a restauração não “recupera” o provedor antigo: ela desativa o wrapper de override `t` e reativa o wrapper base `r`, que é o do editor do app. É o mesmo caminho da limpeza de `onFinishInputView`. Evidência estática forte. `ROUTING_RESTORE_REVIEWED` continua `false` até o aparelho confirmar `getCurrentInputConnection()`/`az()` após a volta.
+
+### T1a — voltar ao alfabético
+
+`0x7f0b0521` = `key_pos_clipboard_back_to_prime` (`_f7.xml`, `bAF.xml`). Implementado em `ClipboardNative1803`: lê a ação primária do próprio `SoftKeyView` (`h()` → `Lpnu`), cria o evento com `Lnur.d(Lpnu)` e despacha por `ClipboardKeyboard.x` (`Loxv.M(Lnur)`). Não usa `performClick()` nem inventa código. A cada processo, ao abrir o clipboard, o log registra uma vez `Clipboard back-to-prime key: <classe> code=<n>` (sem conteúdo), para o trace no aparelho. Continua com `ALPHABET_SWITCH_REVIEWED=false`.
+
+### T1b — voltar ao clipboard
+
+Sem binding. `returnToClipboard()` continua vazio.
+
+### T4 — apagar
+
+`ClipboardNative1803.delete(ctx, ids)` chama `Lfjo.h(Context,List<Long>)` (o mesmo método que o prune customizado do repositório já usa). Como `h` engole falhas, o sucesso só é aceito se a URI de cada item (`Lfjo.d(ctx,1,id)`) não retornar mais linhas. Roda fora da thread principal, e a linha só sai da lista depois da confirmação. Na superfície: toque longo marca a linha (“Tap again to delete”), um toque na mesma linha confirma e qualquer outro toque cancela. Flag própria `DELETE_REVIEWED=false`, independente da busca. Fixar e desafixar continuam fora.
+
+### Pedidos restantes
+
+- **T1a′:** `SoftKeyView;->h()` — tipo de retorno exato (é `Lpnu`?) e o método que, num toque, transforma essa ação em evento e o despacha. Ele usa `Lnur.d(Lpnu)` e `Loxv.M(Lnur)`, ou outro dispatcher (`Lnvq.M`)? Pode ser respondido pelo trace no aparelho com o log acima.
+- **T1b (trace no aparelho):** o código numérico do evento do Access Point de clipboard e o dispatcher, com a ordem de `ClipboardKeyboard.e()`/`h()`.
+- **T3 (aparelho):** área tocável e insets com a superfície aberta.
