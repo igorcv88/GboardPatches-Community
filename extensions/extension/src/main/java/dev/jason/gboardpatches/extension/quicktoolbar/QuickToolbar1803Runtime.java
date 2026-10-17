@@ -79,10 +79,14 @@ public final class QuickToolbar1803Runtime {
             boolean pendingNonempty = candidateListNonempty;
             Object pendingFallbackManager = fallbackManager.get();
             boolean keepFallback = fallbackShown && pendingFallbackManager != null;
+            long stickyRevision = fallbackRevision;
             clear();
             if (keepFallback) {
                 fallbackShown = true;
                 fallbackManager = new WeakReference<>(pendingFallbackManager);
+                // A view rebind within the same input session must not cancel a pending
+                // post-Undo/Redo restoration scheduled before Gboard redrew candidates.
+                fallbackRevision = stickyRevision;
             }
             if (pendingOwner != null) {
                 candidateOwner = new WeakReference<>(pendingOwner);
