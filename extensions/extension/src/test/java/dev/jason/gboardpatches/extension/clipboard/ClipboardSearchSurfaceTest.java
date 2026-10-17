@@ -107,6 +107,48 @@ public class ClipboardSearchSurfaceTest {
         assertEquals(List.of(b), surface.visibleClips());
     }
 
+    @Test public void deletingAFilteredClipNeverExposesNonmatchingResultsDuringDebounce() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        EditText field = new EditText(activity);
+        List<ClipboardSearchSurface.Clip> picked = new ArrayList<>();
+        ClipboardSearchSurface surface = new ClipboardSearchSurface(activity, field, 600,
+                ClipboardSearchController.forImeMainThread(), new ClipboardSearchSurface.Listener() {
+                    public void onPick(ClipboardSearchSurface.Clip clip) { picked.add(clip); }
+                    public void onClose() { }
+                });
+        activity.setContentView(surface);
+        ClipboardSearchSurface.Clip alpha = new ClipboardSearchSurface.Clip(1, R, "alpha");
+        ClipboardSearchSurface.Clip beta = new ClipboardSearchSurface.Clip(2, R, "beta");
+        ClipboardSearchSurface.Clip alphabet = new ClipboardSearchSurface.Clip(3, P, "alphabet");
+        surface.setClips(List.of(alpha, beta, alphabet));
+        field.setText("alpha");
+        settle();
+        assertEquals(List.of(alpha, alphabet), surface.visibleClips());
+
+        // Deletion must be safe immediately, before the worker's 150 ms debounce.
+        surface.remove(1);
+        assertEquals(List.of(alphabet), surface.visibleClips());
+        surface.results.performItemClick(null, 0, alphabet.id);
+        assertEquals(List.of(alphabet), picked);
+        settle();
+        assertEquals(List.of(alphabet), surface.visibleClips());
+
+        // An item changing text under the same ID must not retain its old match.
+        ClipboardSearchSurface.Clip changed = new ClipboardSearchSurface.Clip(3, P, "gamma");
+        surface.setClips(List.of(beta, changed));
+        assertTrue(surface.visibleClips().isEmpty());
+        settle();
+        assertTrue(surface.visibleClips().isEmpty());
+
+        // If the typed query is newer than the displayed results, do not reuse old rows.
+        field.setText("beta");
+        surface.setClips(List.of(beta, changed));
+        assertTrue(surface.visibleClips().isEmpty());
+        settle();
+        assertEquals(List.of(beta), surface.visibleClips());
+        surface.close();
+    }
+
     @Test public void closeClearsQueryDetachesFieldAndIgnoresLateClicks() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         EditText field = new EditText(activity);

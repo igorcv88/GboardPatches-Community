@@ -54,6 +54,9 @@ public final class ClipboardSearchSurface extends LinearLayout {
     private final TextWatcher watcher;
     private List<Clip> clips = List.of();
     private Map<Long, Clip> byId = Map.of();
+    // Query for which adapter.items was last confirmed by the search worker.
+    // A snapshot refresh must not promote unfiltered rows into an active query.
+    private String displayedQuery = "";
     private boolean closed, deleteEnabled;
     private long pendingDelete = Long.MIN_VALUE;
 
@@ -122,8 +125,11 @@ public final class ClipboardSearchSurface extends LinearLayout {
         }
     }
 
-    /** Snapshot in native order; the worker never sees view or model objects. */
+    /** Snapshot in native order; never expose unfiltered rows during an active query. */
     public void setClips(List<Clip> value) {
+        if (closed) return;
+        String query = field instanceof TextView text ? text.getText().toString() : "";
+        List<Clip> previouslyVisible = adapter.items;
         clips = List.copyOf(value);
         Map<Long, Clip> index = new HashMap<>();
         List<ClipboardSearchController.Projection> projections = new ArrayList<>();
@@ -132,8 +138,26 @@ public final class ClipboardSearchSurface extends LinearLayout {
             projections.add(new ClipboardSearchController.Projection(clip.id, clip.section, clip.text, false));
         }
         byId = index;
+        // Invalidates queued results for the old clipboard snapshot.
         worker.replaceSnapshot(projections);
-        showIds(null);
+        if (query.isEmpty()) {
+            displayedQuery = "";
+            showIds(null);
+        } else {
+            // While the replacement search is debounced, retain only rows whose
+            // identity, section and full text are unchanged. If the visible rows
+            // came from a different query, retain none. Never show all clips.
+            List<Long> unchanged = new ArrayList<>();
+            if (query.equals(displayedQuery)) {
+                for (Clip old : previouslyVisible) {
+                    Clip updated = index.get(old.id);
+                    if (updated != null && old.section == updated.section
+                            && old.text.equals(updated.text)) unchanged.add(old.id);
+                }
+            }
+            showIds(unchanged);
+            search(query);
+        }
     }
 
     void search(String query) {
@@ -141,10 +165,16 @@ public final class ClipboardSearchSurface extends LinearLayout {
         if (query == null || query.isEmpty()) {
             worker.search("", ignored -> {}); // Invalidates older in-flight results.
             showIds(null);
+            displayedQuery = "";
             return;
         }
         Map<Long, Clip> snapshot = byId;
-        worker.search(query, ids -> { if (!closed && byId == snapshot) showIds(ids); });
+        worker.search(query, ids -> {
+            if (!closed && byId == snapshot) {
+                showIds(ids);
+                displayedQuery = query;
+            }
+        });
     }
 
     /** Null shows every clip. Order is always the native snapshot order. */
@@ -178,9 +208,7 @@ public final class ClipboardSearchSurface extends LinearLayout {
         List<Clip> kept = new ArrayList<>();
         for (Clip clip : clips) if (clip.id != id) kept.add(clip);
         if (kept.size() == clips.size()) return;
-        String query = field instanceof TextView text ? text.getText().toString() : "";
-        setClips(kept);
-        if (!query.isEmpty()) search(query);
+        setClips(kept); // Retains the filtered projection; re-search scheduled exactly once.
     }
 
     /** Detaches the field and stops the worker. The query never outlives the surface. */

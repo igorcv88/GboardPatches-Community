@@ -81,7 +81,10 @@ internal val gboardClipboardSearch1803Patch = bytecodePatch(
         val begin = RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_INSETS_BEGIN
         val begins = insets.implementation!!.instructions.count { it.isMethodReference(begin.encodedAbi) }
         check(begins <= 1) { "Duplicate clipboard search insets capture" }
-        if (begins == 0) insets.addInstructions(0, RuntimeCallEmitter.invoke(begin, "p1"))
+        // Original 18.0.3 onComputeInsets uses 21 registers and 2 parameter words:
+        // p1 resolves to v20, outside invoke-static (35c)'s 4-bit register limit.
+        // Force the /range encoding so the Morphe inline Smali compiler accepts it.
+        if (begins == 0) insets.addInstructions(0, RuntimeCallEmitter.invoke(begin, "p1 .. p1"))
         else check(insets.implementation!!.instructions.first().isMethodReference(begin.encodedAbi))
         insets.applyVoidExitLifecycleDelegate(RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_INSETS, "")
     }
