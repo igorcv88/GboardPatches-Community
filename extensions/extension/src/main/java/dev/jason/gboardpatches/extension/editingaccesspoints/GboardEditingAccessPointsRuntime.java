@@ -145,7 +145,11 @@ public final class GboardEditingAccessPointsRuntime {
         try {
             // Stock AP clicks are synchronous UI callbacks. Do not queue stale edits.
             if (Looper.myLooper() == Looper.getMainLooper() && enabled(service.get(), action)) {
-                SESSION.execute(action);
+                boolean applied = SESSION.execute(action);
+                if (applied && (action == EditorAction.UNDO || action == EditorAction.REDO)) {
+                    dev.jason.gboardpatches.extension.quicktoolbar.QuickToolbar1803Runtime
+                            .afterSuccessfulHistoryAction();
+                }
             }
         } catch (Throwable ignored) {
             // Descriptor callbacks must not escape into Gboard.

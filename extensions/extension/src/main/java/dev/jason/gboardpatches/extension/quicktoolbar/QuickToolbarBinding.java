@@ -43,6 +43,22 @@ public final class QuickToolbarBinding implements AutoCloseable {
         render();
     }
 
+    /** Adopt the runtime's selected mode after rebind without replaying a native action. */
+    public void update(boolean enabled, boolean active, boolean candidates, boolean selected) {
+        if (closed) return;
+        state.update(enabled, active, candidates);
+        state.select(selected);
+        render();
+    }
+
+    /** Release only view decoration; controller replacement must not close favorites. */
+    public void release() {
+        if (closed) return;
+        state.detach();
+        render();
+        closed = true;
+    }
+
     /** True consumes the stock all-shortcuts event. Other event types must bypass this method. */
     public boolean onMenuEvent() {
         if (closed || state.mode() == QuickToolbarState.Mode.STOCK_TOOLBAR) return false;
