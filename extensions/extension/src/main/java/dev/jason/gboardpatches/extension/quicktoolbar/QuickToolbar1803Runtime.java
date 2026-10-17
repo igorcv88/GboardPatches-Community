@@ -35,15 +35,19 @@ public final class QuickToolbar1803Runtime {
     private static SharedPreferences preferences;
     private static boolean enabled = true;
     private static final SharedPreferences.OnSharedPreferenceChangeListener SETTINGS_CHANGED = (prefs, key) -> {
-        if (key == null || GboardEditingAccessPointsSettings.ENABLED.equals(key))
+        if (key == null || GboardEditingAccessPointsSettings.ENABLED.equals(key)) {
             enabled = GboardEditingAccessPointsSettings.read(prefs, GboardEditingAccessPointsSettings.ENABLED);
+            if (!enabled) QuickToolbar1803Runtime.UI.post(() -> { if (!enabled) reset(); });
+        }
     };
-    /** Favorites shown by the event fallback, without the arrow binding on the button. */
-    private static boolean fallbackShown;
+    /** Single user-selected mode shared by bound and fallback adapters. */
+    private static boolean favoritesSelected;
     /** The native manager may remain valid when an AP controller binding is unavailable. */
-    private static WeakReference<Object> fallbackManager = new WeakReference<>(null);
+    private static WeakReference<Object> selectedManager = new WeakReference<>(null);
     /** Prevent callbacks posted before a toggle/session reset from restoring a closed row. */
-    private static long fallbackRevision;
+    private static long selectionRevision;
+    private static final Handler UI = new Handler(Looper.getMainLooper());
+    private static Runnable pendingRestore;
     private static final java.util.Set<String> REPORTED = ConcurrentHashMap.newKeySet();
     private QuickToolbar1803Runtime() {}
 
@@ -59,6 +63,7 @@ public final class QuickToolbar1803Runtime {
         if (!main() || applying) return;
         candidateOwner = new WeakReference<>(owner);
         candidateListNonempty = candidates instanceof java.util.List<?> list && !list.isEmpty();
+        scheduleRestore();
     }
 
     public static void onControllerView(Object value) {
@@ -74,36 +79,23 @@ public final class QuickToolbar1803Runtime {
                 controller.clear(); manager.clear(); bar.clear();
                 return;
             }
-            // Leso can deliver candidates before the new AP controller is attached.
-            Object pendingOwner = candidateOwner.get();
-            boolean pendingNonempty = candidateListNonempty;
-            Object pendingFallbackManager = fallbackManager.get();
-            boolean keepFallback = fallbackShown && pendingFallbackManager != null;
-            long stickyRevision = fallbackRevision;
-            clear();
-            if (keepFallback) {
-                fallbackShown = true;
-                fallbackManager = new WeakReference<>(pendingFallbackManager);
-                // A view rebind within the same input session must not cancel a pending
-                // post-Undo/Redo restoration scheduled before Gboard redrew candidates.
-                fallbackRevision = stickyRevision;
-            }
-            if (pendingOwner != null) {
-                candidateOwner = new WeakReference<>(pendingOwner);
-                candidateListNonempty = pendingNonempty;
-            }
+            // Replacing an adapter is not a user toggle or a new input session.
+            clearBinding();
+            controller.clear(); manager.clear(); bar.clear();
             Object nativeManager = call(value, "G");
             if (nativeManager == null) { diagnose("controller has no manager"); return; }
             controller = new WeakReference<>(value);
             manager = new WeakReference<>(nativeManager);
+            if (favoritesSelected) selectedManager = new WeakReference<>(nativeManager);
             bar = new WeakReference<>(nativeView);
             Object candidates = candidateOwner.get();
             if (candidates != null) onCandidates(candidates);
-        } catch (Throwable failure) { diagnose("controller binding failed: " + failure.getClass().getSimpleName()); clear(); }
+        } catch (Throwable failure) { diagnose("controller binding failed: " + failure.getClass().getSimpleName()); clearBinding(); }
     }
 
     public static void onCandidates(Object value) {
-        if (!main() || applying) return;
+        if (!main() || applying || value != candidateOwner.get()) return;
+        scheduleRestore();
         try {
             Object nativeCandidate = field(value, "c");
             if (!(nativeCandidate instanceof View candidate)) { diagnose("candidate view missing"); return; }
@@ -136,16 +128,16 @@ public final class QuickToolbar1803Runtime {
             boolean active = rootView.isShown() && rootView.isAttachedToWindow()
                     && left.isShown() && !((Boolean) field(controller.get(), "p"));
             boolean hasCandidates = candidateOwner.get() == value && candidateListNonempty
-                    && (((Number) field(value, "g")).intValue() > 0
-                            || binding.mode() == QuickToolbarState.Mode.QUICK_TOOLS);
+                    && ((Number) field(value, "g")).intValue() > 0;
             if (preferences == null) {
                 preferences = GboardPatchesSettings.preferences(left.getContext());
                 enabled = GboardEditingAccessPointsSettings.read(preferences, GboardEditingAccessPointsSettings.ENABLED);
                 preferences.registerOnSharedPreferenceChangeListener(SETTINGS_CHANGED);
             }
             binding.update(enabled,
-                    active && (candidate.isShown() || binding.mode() == QuickToolbarState.Mode.QUICK_TOOLS),
-                    hasCandidates);
+                    active && (candidate.isShown() || favoritesSelected),
+                    hasCandidates || favoritesSelected, favoritesSelected);
+            scheduleRestore();
         } catch (Throwable failure) {
             diagnose("candidate binding failed: " + failure.getClass().getSimpleName());
             clearBinding();
@@ -156,7 +148,7 @@ public final class QuickToolbar1803Runtime {
         if (!main() || applying || owner != candidateOwner.get()) return;
         // Native favorites suppress the candidate view without ending the text session.
         // Actual empty candidate lists arrive independently through b(List, ...).
-        if (binding != null && binding.mode() == QuickToolbarState.Mode.QUICK_TOOLS && candidateListNonempty) return;
+        if (favoritesSelected) return;
         clearBinding();
     }
 
@@ -172,6 +164,7 @@ public final class QuickToolbar1803Runtime {
             return false;
         }
         if (code != -40005 && code != -40006) return false;
+        if (!featureEnabled()) { deselect(); return false; }
         if (binding != null && nativeManager == manager.get()) {
             try {
                 if (!isToggleCode(code)) return false;
@@ -202,14 +195,11 @@ public final class QuickToolbar1803Runtime {
         if (!featureEnabled()) return false;
         // Only favorites this fallback opened are closed here: in the normal keyboard state the
         // native row is visible by itself and the key must keep opening the full panel.
-        if (fallbackShown) {
-            fallbackShown = false;
-            fallbackManager.clear();
-            fallbackRevision++;
-            if (favoritesVisible()) {
-                hideFavorites(nativeManager);
-                return true;
-            }
+        if (favoritesSelected) {
+            if (nativeManager != selectedManager.get()) return false;
+            deselect();
+            hideFavorites(nativeManager);
+            return true;
         }
         if (code != -40005) return false;
         if (!candidateListNonempty || candidateOwner.get() == null) {
@@ -220,37 +210,36 @@ public final class QuickToolbar1803Runtime {
             diagnose("favorites fallback failed; stock panel kept");
             return false;
         }
-        fallbackShown = true;
-        fallbackManager = new WeakReference<>(nativeManager);
-        fallbackRevision++;
+        favoritesSelected = true;
+        selectedManager = new WeakReference<>(nativeManager);
+        selectionRevision++;
         diagnose("favorites shown by event fallback (no button binding)");
         return true;
     }
 
-    /**
-     * A successful Undo/Redo can make Gboard redraw the native candidate row over the
-     * favorites. Reassert the *user-selected* favorites mode after the redraw, without
-     * changing input history or opening the full shortcuts panel.
-     */
+    /** Coalesced after native candidate callbacks, independent of display refresh rate. */
     public static void afterSuccessfulHistoryAction() {
-        if (!main() || !fallbackShown) return;
-        Object target = fallbackManager.get();
-        if (target == null) return;
-        long expectedRevision = fallbackRevision;
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (!fallbackShown || fallbackRevision != expectedRevision
-                    || target != fallbackManager.get() || !featureEnabled() || applying) return;
-            if (invokeShowFavorites(target)) diagnose("favorites restored after Undo/Redo");
-        }, 48L);
+        if (main()) scheduleRestore();
     }
 
-    private static boolean favoritesVisible() {
-        Object nativeController = controller.get();
-        if (nativeController != null) {
-            try { return Boolean.TRUE.equals(field(nativeController, "o")); }
-            catch (Throwable ignored) { /* Unknown: assume the row this fallback opened is still shown. */ }
-        }
-        return true;
+    private static void scheduleRestore() {
+        if (!favoritesSelected || pendingRestore != null || applying) return;
+        long expected = selectionRevision;
+        pendingRestore = () -> {
+            pendingRestore = null;
+            if (!favoritesSelected || selectionRevision != expected || !featureEnabled() || applying) return;
+            Object target = selectedManager.get();
+            if (target != null) invokeShowFavorites(target);
+        };
+        UI.post(pendingRestore);
+    }
+
+    private static void deselect() {
+        favoritesSelected = false;
+        selectedManager.clear();
+        selectionRevision++;
+        if (pendingRestore != null) UI.removeCallbacks(pendingRestore);
+        pendingRestore = null;
     }
 
     static Boolean enabledOverride; // Tests only.
@@ -266,10 +255,10 @@ public final class QuickToolbar1803Runtime {
     private static boolean showFavorites() {
         Object target = manager.get();
         if (target == null || !invokeShowFavorites(target)) return false;
-        try {
-            return Boolean.TRUE.equals(field(controller.get(), "o"))
-                    && !Boolean.TRUE.equals(field(controller.get(), "p")) && bar.get() != null && bar.get().isShown();
-        } catch (Throwable ignored) { return false; }
+        favoritesSelected = true;
+        selectedManager = new WeakReference<>(target);
+        selectionRevision++;
+        return true;
     }
 
     /** Reviewed Lmln.M(ZZLpfz;Z)V: native ordered favorites, never Lmlh.D (all shortcuts). */
@@ -287,7 +276,11 @@ public final class QuickToolbar1803Runtime {
         } finally { applying = false; }
     }
 
-    private static void hideFavorites() { hideFavorites(manager.get()); }
+    private static void hideFavorites() {
+        Object target = selectedManager.get();
+        deselect();
+        hideFavorites(target != null ? target : manager.get());
+    }
 
     private static void hideFavorites(Object target) {
         if (target == null || applying) return;
@@ -304,8 +297,7 @@ public final class QuickToolbar1803Runtime {
         return action == null ? 0 : ((Number) field(action, "c")).intValue();
     }
     private static boolean isToggleCode(int code) {
-        return code == -40005 || code == -40006 && binding != null
-                && binding.mode() == QuickToolbarState.Mode.QUICK_TOOLS;
+        return code == -40005 || code == -40006 && favoritesSelected;
     }
     private static boolean main() { return Looper.myLooper() == Looper.getMainLooper(); }
     private static Object field(Object receiver, String name) throws Exception {
@@ -341,18 +333,18 @@ public final class QuickToolbar1803Runtime {
         View previousButton = button.get();
         if (previousButton != null) previousButton.removeOnAttachStateChangeListener(DETACH);
         button.clear(); header.clear();
-        if (previous != null) previous.close();
+        if (previous != null) previous.release();
     }
     public static void reset() {
         if (!main()) return;
         // A new input session must not inherit the previous editor's suggestion state.
-        clearBinding(); fallbackShown = false; fallbackManager.clear(); fallbackRevision++;
+        Object target = selectedManager.get();
+        deselect(); hideFavorites(target);
+        clearBinding(); controller.clear(); manager.clear(); bar.clear();
         candidateOwner.clear(); candidateListNonempty = false;
     }
     public static void clear() {
-        clearBinding(); controller.clear(); manager.clear(); bar.clear(); fallbackShown = false;
-        fallbackManager.clear(); fallbackRevision++;
-        candidateOwner.clear(); candidateListNonempty = false;
+        reset();
         if (preferences != null) preferences.unregisterOnSharedPreferenceChangeListener(SETTINGS_CHANGED);
         preferences = null;
     }

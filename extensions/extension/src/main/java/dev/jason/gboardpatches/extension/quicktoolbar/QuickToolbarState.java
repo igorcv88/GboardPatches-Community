@@ -24,5 +24,7 @@ public final class QuickToolbarState {
         return expanded ? Click.SHOW_FAVORITES : Click.SHOW_CANDIDATES;
     }
 
+    public void select(boolean selected) { expanded = selected && enabled && activeContext && candidates; }
+
     public void detach() { update(false, false, false); }
 }
