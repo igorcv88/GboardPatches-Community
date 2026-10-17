@@ -14,9 +14,10 @@ true. Merely not throwing is insufficient for either route direction.
 
 APK 18.0.3 SHA-256 3099262121a201dcb2ae7e185bee6b2057287a5aeffae4be0e30f537e505e5b3.
 Loup.Z(Loqa;Z)V calls aC(provider,reset,true). aC(null,...) selects r and clears t's provider;
-aC(field,...) selects t and calls t.n(field). Loup.aA()Z compares active v with editor r.
+aC(field,...) selects t and calls t.n(field). The protected final Loup.aA()Z compares active v with editor r.
 Thus aA()==true confirms the editor provider; false is required after routing to the field.
-Unknown reflection results fail closed. This confirms provider selection, not native key
+Lookup walks the class hierarchy with getDeclaredMethod/setAccessible; a public-only lookup
+would fail on this protected method. Unknown reflection results fail closed. This confirms provider selection, not native key
 routing or device layout, which remain separate acceptance tests.
 
 ## Changes

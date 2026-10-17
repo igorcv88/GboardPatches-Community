@@ -30,8 +30,9 @@ public class ClipboardNativeSearch1803HostTest {
             providers.add(provider); resets.add(reset);
             if (!ignoreRouting) editor = provider == null;
         }
-        public boolean aA() { return editor; }
+        protected boolean aA() { return editor; }
     }
+    public static class ChildService extends Service { }
     /** Mirrors EditTextOnKeyboard: a focusable Loqa view with its own lazily created connection. */
     public static class Field extends View implements Provider {
         Object connection = new Object();
@@ -52,7 +53,7 @@ public class ClipboardNativeSearch1803HostTest {
 
     @Test public void routesLikeJarvisAndRestoresWithTheNativeFinishInputViewCall() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        Service service = new Service();
+        Service service = new ChildService();
         Field field = attachedField(activity);
         ClipboardNativeSearch1803.Host host = new ClipboardNativeSearch1803.Host(service, field);
         assertTrue(host.routeToField());

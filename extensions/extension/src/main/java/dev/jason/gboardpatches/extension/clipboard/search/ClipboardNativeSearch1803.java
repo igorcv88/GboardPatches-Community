@@ -239,8 +239,14 @@ public final class ClipboardNativeSearch1803 {
         /** Loup.aA(): active Loqe v equals the editor provider r (18.0.3). */
         private Boolean editorRouting() {
             try {
-                Method check = ime.getClass().getMethod("aA");
-                return (Boolean) check.invoke(ime);
+                for (Class<?> type = ime.getClass(); type != null; type = type.getSuperclass()) {
+                    try {
+                        Method check = type.getDeclaredMethod("aA");
+                        check.setAccessible(true);
+                        return (Boolean) check.invoke(ime);
+                    } catch (NoSuchMethodException ignored) { }
+                }
+                return null;
             } catch (Throwable failure) { report("route-confirmation", failure); return null; }
         }
 
