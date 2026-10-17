@@ -49,3 +49,59 @@ Recomendo a opção 1. A decisão é do usuário.
 5. **`ClipboardKeyboard`**: em `e(EditorInfo,Object)V`, o container pai em que o painel é inserido (`FrameLayout` em `pc=480,483`) e se o clipboard é um "body keyboard" que substitui o alfabético. Em `m(Lnur;)Z` `pc=187-208`, o significado de `Lpfj(String,Lvwd,Z,Z)` passado a `Loxv.al`: é a troca para outro teclado? Qual valor de `String`/`Lvwd` leva ao alfabético.
 
 Com as respostas de 1–3 é possível implementar o roteamento da consulta. As respostas 4–5 decidem se os resultados podem ficar acima do teclado sem reescrever o layout do IME.
+
+## Decisão (16/10/2026): opção 2 — resultados acima, teclado alfabético nativo abaixo
+
+### Arquitetura implementada (PR separado, ainda desligada)
+
+| Peça | Mecanismo | Estado |
+| --- | --- | --- |
+| Superfície de resultados | Área de candidatos do próprio `InputMethodService` (`setCandidatesView` / `setCandidatesViewShown`), acima da input view do Gboard. API pública do framework; não redimensiona `Lppe.b` nem altera o layout do Gboard | Implementada |
+| Teclado | O teclado alfabético nativo do Gboard, no corpo normal | Troca clipboard → alfabético **sem binding** (A1) |
+| Campo | `EditTextOnKeyboard(Context)` (implementa `Loqa`) dentro da superfície | Implementado |
+| Roteamento | `Loup.Z(Loqa;Z)V` com `reset=false` (mesmo valor de `JarvisPromptKeyboard.K`) → `Loup.aC` | Ida implementada; volta **sem binding** (A3) |
+| Dados | Snapshot imutável dos clips de texto (`Lfjk.n`, ordem nativa, texto completo; sensíveis, cabeçalhos e não-texto excluídos) | Implementado |
+| Busca | `ClipboardSearchController`/`Matcher` existentes (texto completo, acento/caixa, worker cancelável) | Implementado |
+| Colar | Restaura o provedor e faz `commitText` na conexão do serviço (passa pelo journal de Undo) | Implementado |
+| Fixar/apagar | Ações nativas do card | **Sem binding** (A6); fora da superfície por enquanto |
+| Fim de sessão | Hook em `Loup.onFinishInputView/onFinishInput/onWindowHidden/onDestroy` restaura provedor e superfície | Implementado |
+| Back | Hoje fecha a IME (o hook de fim restaura tudo); cancelar a busca com Back exige A7 | Pendente |
+
+`ClipboardNativeSearchSession` garante a ordem: abre superfície → alfabético → roteia (por último); fecha restaurando o provedor **primeiro**, depois esconde a superfície; cancelar volta ao clipboard; colar fica no alfabético. Falha em qualquer passo desfaz os anteriores. `ClipboardKeyboard.h()` não encerra a busca (a troca para o alfabético o dispara de propósito).
+
+**Falha fechada:** `ClipboardNativeSearch1803.available()` só retorna `true` quando as quatro flags `*_REVIEWED` forem verdadeiras. Até lá o botão de busca não aparece; o teclado de 34 dp e o filtro dentro do painel foram removidos. Ou seja, este PR, como está, **remove** a busca atual e só a devolve na forma nova quando os bindings forem confirmados.
+
+Superfície independente com as ações nativas (mover o `RecyclerView` 0x7f0b01bd e o adapter `Lfjk` para a superfície): avaliada e não adotada agora. Exige impedir a limpeza de `ClipboardKeyboard.h()` (observadores, RecyclerView, `Lfkh.a`) e provar que `ClipboardKeyboard.D(Lfih;Z)` funciona com o teclado inativo (A8). Fica como alternativa se A6 não tiver API de dados utilizável.
+
+### Perguntas binárias (classe / método / o que esclarecer)
+
+- **A1 — clipboard → alfabético.** Em `ClipboardKeyboard`, o handler do botão de voltar/“ABC” do header: método, código de evento (`Lnur`) e a chamada que troca de teclado (ex.: `Loxv.al(Lpfj)` e o valor de `displayName`/`Lvwd`). A troca chama `ClipboardKeyboard.h()` de forma síncrona?
+- **A2 — alfabético → clipboard.** A chamada que abre o `ClipboardKeyboard` a partir do teclado alfabético (clique do access point de clipboard): método, código de evento ou `Lpfj` usado.
+- **A3 — restauração do provedor.** Corpo de `Loup;->aC(Loqa;ZZ)V` (`0x2eedf8`) e `Loup;->C(Loqe;ZZ)V`: o que acontece quando o provedor é o próprio `Loup` (é assim que se restaura?), quem instala o `Loup` como provedor no início da sessão (callers de `aC` com `p0`), e se `aC`/`C` chamam `onStartInput`, `onStartInputView`, `onFinishInputView` ou `onFinishInput` do próprio `Loup` (isso encerraria a busca pelo hook de fim).
+- **A4 — área de candidatos.** `Loup;` (ou superclasses até `InputMethodService`) declara `onComputeInsets(InputMethodService$Insets)`, `setCandidatesViewShown(Z)`, `onCreateCandidatesView()`, `onEvaluateInputViewShown()` ou `onConfigureWindow(...)`? Se declara `onComputeInsets`: valores de `touchableInsets`/`touchableRegion`/`contentTopInsets`. Existe algum caller de `setCandidatesView`/`setCandidatesViewShown` no APK?
+- **A5 — `EditTextOnKeyboard` fora do Jarvis.** `getCurrentInputConnection()` (`0x67a024`) / `j()` (`0x67ab14`): qual `EditorInfo` é usado em `e(EditText,EditorInfo)` e se o campo precisa estar anexado/focado antes de virar provedor. Algum listener (`Loph`) precisa ser registrado?
+- **A6 — fixar/apagar por id.** Métodos de `Lfjk`/`ClipboardKeyboard`/`Lfjv` usados pelas ações do card (fixar, desafixar, apagar) para um `Lfih` ou id: assinatura e se exigem o teclado ativo.
+- **A7 — Back.** `Loup;` declara `onKeyDown(ILandroid/view/KeyEvent;)Z`/`onKeyUp`? Como `KEYCODE_BACK` é tratado (para cancelar a busca em vez de fechar a IME).
+- **A8 — (alternativa) colar nativo fora do painel.** `ClipboardKeyboard.D(Lfih;Z)V` (`0x37713c`) depende de campos zerados por `h()` (`0x378264`)?
+
+## Extração A1–A8 (16/10/2026) aplicada ao PR #17
+
+| Item | Aplicado no código | Flag |
+| --- | --- | --- |
+| A3 restauração | `restoreRouting()` = `Loup.Z(null,false)` ≡ `aC(null,false,true)`, a mesma chamada que `Loup.onFinishInputView` faz (0x2ee044, pc≈128–130). Não usa `Z(Loup,false)`. Rollback restaura também quando o roteamento falha ou lança exceção (`Loqe.n` roda em pc≈45, antes do ramo de `Loup.C`) | `ROUTING_RESTORE_REVIEWED=false` |
+| A3 lifecycle | `end()` vindo de `onFinishInputView/onFinishInput/onWindowHidden/onDestroy` durante a abertura é adiado e aplicado logo depois (a troca de teclado não desmonta uma sessão pela metade) | — |
+| A4 insets | Captura do `Insets` na entrada de `Loup.onComputeInsets` (`p1`, garantido) e ajuste na saída sem registradores. Só com a busca aberta e a superfície visível: `REGION` → `touchableRegion ∪ superfície`; sempre `visibleTopInsets = min(nativo, topo da superfície)`; `contentTopInsets` intocado. Fora da busca, nada muda (Frosted Glass e insets nativos preservados) | `INSETS_REVIEWED=false` |
+| A4 visibilidade | `showSurface()` só confirma o anexo; 500 ms depois, se a superfície não estiver visível com altura > 0, a busca é encerrada | — |
+| A5 campo | Igual a `JarvisPromptKeyboard.K`: campo anexado e focado, `getCurrentInputConnection()` não nulo, depois `Z(campo,false)` | — |
+| A7 Back | Hook na entrada de `Loup.onKeyDown/onKeyUp`: com a busca aberta, Back é consumido e o UP cancela a busca (volta ao clipboard). Sem busca, o caminho nativo roda intacto | — |
+| A8 | Mantido o snapshot + `commitText`; `D()` não é usado | — |
+| Colar | Recusa se a conexão atual for a do `InputBinding` (dummy, mesma regra de `Loup.az()`) | — |
+| A6 fixar/desafixar | `ClipboardKeyboard.Q(Lfih;I)V` exige o `ClipboardKeyboard` vivo, que deixa de existir quando o alfabético entra. Não implementado na superfície | — |
+
+### Ainda bloqueado (pedidos exatos)
+
+- **T1a (troca clipboard → alfabético):** o id de recurso do botão do header do clipboard que volta ao teclado (`res/crz.xml`, `res/_f7.xml`, `res/bAF.xml`) e o código de evento `Lnur` que ele emite. Com o id, a troca pode usar o próprio handler nativo (`performClick`) em vez de montar um `Lpfj`.
+- **T1b (alfabético → clipboard):** o código de evento (`Lnur`/keycode) emitido pelo Access Point de clipboard e o método que o despacha (ex.: `Loxv.M(Lnur)`), com a assinatura da fábrica de `Lnur` usada nesse caminho.
+- **T2 (`Loup.aC`):** o predicado que leva ao `Loup.C(Loqe;ZZ)V` em pc≈60–72 (corpo `throw null`). Se o roteamento para `EditTextOnKeyboard` puder satisfazê-lo, a troca lança `NullPointerException`. E o que `Loqe.n(null)` faz com o provedor anterior.
+- **T3 (aparelho):** com a busca aberta, `adb shell dumpsys input_method` (insets e região tocável) e o toque na superfície em retrato, paisagem e flutuante.
+- **T4 (apagar):** método persistente de exclusão de um `Lfih` em `Lfke`/`Lfjz`, que funcione sem o `ClipboardKeyboard` aberto. O mesmo vale para fixar/desafixar pelo controlador de dados, e não pelo `ClipboardKeyboard.Q`.
