@@ -4,9 +4,11 @@ import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod.Companion.toMutable
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.Opcode
-import com.android.tools.smali.dexlib2.builder.MutableMethodImplementation
 import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
 import com.android.tools.smali.dexlib2.immutable.ImmutableMethod
+import com.android.tools.smali.dexlib2.immutable.ImmutableMethodImplementation
+import com.android.tools.smali.dexlib2.immutable.ImmutableMethodParameter
+import com.android.tools.smali.dexlib2.immutable.instruction.ImmutableInstruction10x
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -18,18 +20,25 @@ class RuntimeCallEmitterTest {
         val method = ImmutableMethod(
             "Loup;",
             "onComputeInsets",
-            listOf("Landroid/inputmethodservice/InputMethodService\$Insets;"),
+            listOf(ImmutableMethodParameter(
+                "Landroid/inputmethodservice/InputMethodService\$Insets;", emptySet(), null,
+            )),
             "V",
             AccessFlags.PUBLIC.value,
             emptySet(),
             emptySet(),
-            MutableMethodImplementation(21),
+            ImmutableMethodImplementation(
+                21,
+                listOf(ImmutableInstruction10x(Opcode.RETURN_VOID)),
+                emptyList(),
+                emptyList(),
+            ),
         ).toMutable()
         method.addInstructions(
             0,
             RuntimeCallEmitter.invoke(RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_INSETS_BEGIN, "p1 .. p1"),
         )
-        val call = method.implementation!!.instructions.single()
+        val call = method.implementation!!.instructions.first()
         assertEquals(Opcode.INVOKE_STATIC_RANGE, call.opcode)
         val range = call as RegisterRangeInstruction
         assertEquals(20, range.startRegister)
