@@ -40,6 +40,8 @@ public final class ClipboardSearchSurface extends LinearLayout {
     public interface Listener {
         void onPick(Clip clip);
         void onClose();
+        /** Explicit, confirmed delete request for one clip. */
+        default void onDelete(Clip clip) { }
     }
 
     final View field;
@@ -52,7 +54,8 @@ public final class ClipboardSearchSurface extends LinearLayout {
     private final TextWatcher watcher;
     private List<Clip> clips = List.of();
     private Map<Long, Clip> byId = Map.of();
-    private boolean closed;
+    private boolean closed, deleteEnabled;
+    private long pendingDelete = Long.MIN_VALUE;
 
     public ClipboardSearchSurface(Context context, View field, int heightPx,
             ClipboardSearchController worker, Listener listener) {
@@ -79,7 +82,21 @@ public final class ClipboardSearchSurface extends LinearLayout {
         results = new ListView(context);
         results.setAdapter(adapter);
         results.setOnItemClickListener((parent, view, position, id) -> {
-            if (!this.closed) this.listener.onPick(adapter.getItem(position));
+            if (this.closed) return;
+            Clip clip = adapter.getItem(position);
+            if (pendingDelete != Long.MIN_VALUE) {
+                // A second, explicit tap on the marked row confirms; any other tap only cancels.
+                boolean confirm = pendingDelete == clip.id;
+                setPendingDelete(Long.MIN_VALUE);
+                if (confirm) this.listener.onDelete(clip);
+                return;
+            }
+            this.listener.onPick(clip);
+        });
+        results.setOnItemLongClickListener((parent, view, position, id) -> {
+            if (this.closed || !deleteEnabled) return false;
+            setPendingDelete(adapter.getItem(position).id);
+            return true;
         });
         addView(results, new LayoutParams(-1, 0, 1));
         empty = new TextView(context);
@@ -145,6 +162,27 @@ public final class ClipboardSearchSurface extends LinearLayout {
 
     List<Clip> visibleClips() { return adapter.items; }
 
+    public void setDeleteEnabled(boolean value) { deleteEnabled = value; if (!value) setPendingDelete(Long.MIN_VALUE); }
+
+    long pendingDelete() { return pendingDelete; }
+
+    private void setPendingDelete(long id) {
+        pendingDelete = id;
+        adapter.pending = id;
+        adapter.notifyDataSetChanged();
+    }
+
+    /** Removes a clip the store has confirmed deleted, from the snapshot and the results. */
+    public void remove(long id) {
+        if (closed) return;
+        List<Clip> kept = new ArrayList<>();
+        for (Clip clip : clips) if (clip.id != id) kept.add(clip);
+        if (kept.size() == clips.size()) return;
+        String query = field instanceof TextView text ? text.getText().toString() : "";
+        setClips(kept);
+        if (!query.isEmpty()) search(query);
+    }
+
     /** Detaches the field and stops the worker. The query never outlives the surface. */
     public void close() {
         if (closed) return;
@@ -162,6 +200,7 @@ public final class ClipboardSearchSurface extends LinearLayout {
     private static final class Adapter extends BaseAdapter {
         List<Clip> items = List.of();
         int color;
+        long pending = Long.MIN_VALUE;
         public int getCount() { return items.size(); }
         public Clip getItem(int position) { return items.get(position); }
         public long getItemId(int position) { return items.get(position).id; }
@@ -177,7 +216,7 @@ public final class ClipboardSearchSurface extends LinearLayout {
             // Preview only: the full text stays in the snapshot for search and paste.
             String text = clip.text;
             if (text.length() > 300) text = text.substring(0, Character.isHighSurrogate(text.charAt(299)) ? 299 : 300);
-            row.setText(text);
+            row.setText(clip.id == pending ? "Tap again to delete · " + text : text);
             return row;
         }
     }

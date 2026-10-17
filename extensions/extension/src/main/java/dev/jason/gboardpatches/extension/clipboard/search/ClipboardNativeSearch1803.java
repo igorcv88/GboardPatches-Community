@@ -39,6 +39,8 @@ public final class ClipboardNativeSearch1803 {
     static final boolean ALPHABET_SWITCH_REVIEWED = false;     // T1: clipboard body -> alphabet
     static final boolean RETURN_TO_CLIPBOARD_REVIEWED = false; // T1: alphabet -> clipboard panel
     static final boolean INSETS_REVIEWED = false;              // T3: device measurement
+    /** Persistent delete from the results (Lfjo.h); separate so search never implies delete. */
+    static final boolean DELETE_REVIEWED = false;
 
     private static ClipboardNativeSearchSession active;
     private static ClipboardSearchSurface surface;
@@ -52,22 +54,19 @@ public final class ClipboardNativeSearch1803 {
     }
 
     /** Called from the clipboard header search button with the current text snapshot. */
-    public static boolean open(View anchor, List<ClipboardSearchSurface.Clip> clips) {
+    public static boolean open(Object keyboard, View anchor, List<ClipboardSearchSurface.Clip> clips) {
         if (!main() || !available() || active != null) return false;
         InputMethodService ime = service(anchor.getContext());
         if (ime == null) return false;
         try {
             Object field = Class.forName(FIELD_CLASS, true, ime.getClass().getClassLoader())
                     .getConstructor(Context.class).newInstance(ime);
-            return start(ime, (View) field, clips);
+            Host host = new Host(ime, (View) field, keyboard, anchor.getRootView());
+            return start(ime, (View) field, clips, host);
         } catch (Throwable failure) {
             report("open", failure);
             return false;
         }
-    }
-
-    static boolean start(InputMethodService ime, View field, List<ClipboardSearchSurface.Clip> clips) {
-        return start(ime, field, clips, new Host(ime, field));
     }
 
     static boolean start(InputMethodService ime, View field, List<ClipboardSearchSurface.Clip> clips,
@@ -78,7 +77,9 @@ public final class ClipboardNativeSearch1803 {
                 ClipboardSearchController.forImeMainThread(), new ClipboardSearchSurface.Listener() {
                     public void onPick(ClipboardSearchSurface.Clip clip) { session.pick(clip.text); finish(); }
                     public void onClose() { session.cancel(); finish(); }
+                    public void onDelete(ClipboardSearchSurface.Clip clip) { delete(ime, clip); }
                 });
+        surface.setDeleteEnabled(DELETE_REVIEWED);
         surface.setClips(clips);
         active = session;
         // Switching keyboards may run Loup lifecycle callbacks; they must not tear down a
@@ -157,6 +158,22 @@ public final class ClipboardNativeSearch1803 {
         insets.visibleTopInsets = Math.min(insets.visibleTopInsets, surfaceRect.top);
     }
 
+    /** Off the IME thread; the row disappears only after the store proves the item is gone. */
+    private static void delete(InputMethodService ime, ClipboardSearchSurface.Clip clip) {
+        ClipboardSearchSurface target = surface;
+        if (!DELETE_REVIEWED || target == null) return;
+        Thread worker = new Thread(() -> {
+            boolean deleted = ClipboardNative1803.delete(ime, List.of(clip.id));
+            target.post(() -> {
+                if (surface != target) return;
+                if (deleted) target.remove(clip.id);
+                else report("delete", new IllegalStateException("not confirmed"));
+            });
+        }, "gboard-clipboard-delete");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
     static boolean isOpen() { return active != null && active.state() == ClipboardNativeSearchSession.State.OPEN; }
 
     private static void finish() {
@@ -169,7 +186,12 @@ public final class ClipboardNativeSearch1803 {
     static final class Host implements ClipboardNativeSearchSession.Host {
         private final InputMethodService ime;
         private final View field;
-        Host(InputMethodService ime, View field) { this.ime = ime; this.field = field; }
+        private final Object keyboard;
+        private final View panelRoot;
+        Host(InputMethodService ime, View field) { this(ime, field, null, null); }
+        Host(InputMethodService ime, View field, Object keyboard, View panelRoot) {
+            this.ime = ime; this.field = field; this.keyboard = keyboard; this.panelRoot = panelRoot;
+        }
 
         @Override public boolean showSurface() {
             if (surface == null) return false;
@@ -185,8 +207,13 @@ public final class ClipboardNativeSearch1803 {
             ime.setCandidatesView(new View(ime));
         }
 
+        /**
+         * Emits the back-to-prime key's own action (0x7f0b0521) through ClipboardKeyboard.x.
+         * Pending device proof that this is the event a tap produces (ALPHABET_SWITCH_REVIEWED).
+         */
         @Override public boolean switchToAlphabet() {
-            return false; // Binding pending (ALPHABET_SWITCH_REVIEWED): see plan, T1.
+            if (!ALPHABET_SWITCH_REVIEWED) return false;
+            return ClipboardNative1803.dispatch(keyboard, ClipboardNative1803.backKeyAction(panelRoot));
         }
 
         /** Mirrors JarvisPromptKeyboard.K: focus, obtain the field connection, then route. */
