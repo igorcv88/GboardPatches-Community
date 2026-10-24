@@ -109,9 +109,16 @@ public final class TermuxClipboardSuggestion {
             Object primarySurface = staticField(surface, "a");
             Class<?> nativeClip = loader.loadClass("fih");
             // Reviewed private native text-chip builder; replace its listener BEFORE publication.
+            android.content.Context themedContext = source.ime;
+            try {
+                Object module = field(source.owner, "l");
+                if (module != null && call(module, "a", new Class<?>[0]) instanceof android.content.Context context) {
+                    themedContext = context;
+                }
+            } catch (ReflectiveOperationException ignored) { /* Service context remains a valid fallback. */ }
             View view = (View) call(source.owner, "y", new Class<?>[]{android.content.Context.class,
                     nativeClip, boolean.class, int.class, boolean.class, surface},
-                    source.ime, source.clip, false, 2, true, primarySurface);
+                    themedContext, source.clip, false, 2, true, primarySurface);
             if (view == null) { clear(); return; }
             view.setVisibility(View.VISIBLE);
             view.setOnLongClickListener(null);

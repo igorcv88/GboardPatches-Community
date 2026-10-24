@@ -22,7 +22,7 @@ logs), renders with the reviewed native `Lfif.y` text-chip layout, replaces its 
 click listener **before publication**, builds `qju/qjv`, and publishes through `qjr.a`
 into the existing proactive suggestion holder. It adds no view bar, permanent button,
 toolbar replacement or arrow event handler. The fallback does not rely on a prediction
-engine or on `oru.a()` returning a themed context. It uses the active IME context.
+engine or on `oru.a()` returning a themed context. It uses the native module theme context when available, with the active IME context as fallback.
 
 The native helper remains responsible for delivering new sources. Service start covers
 copies received before the keyboard opens; helper refresh covers later copies. End/hide
@@ -50,16 +50,20 @@ No synthetic Enter, native click dispatch or extra paste path is used.
   methods/fields and the 13-register `x()` shape. Requires the optional `androguard`
   package and the original APK as argument.
 - New production Java compiles against Android 14 API classes using ECJ Java 17.
-- 8 policy/ticket JUnit tests and 10 Robolectric API 33 adapter tests pass locally.
+- 8 policy/ticket JUnit tests and 11 Robolectric API 33 adapter tests pass locally.
   The adapter tests use small native ABI doubles, plus a stub of the manual-incognito
   predicate (default false) in the standalone local harness. They do not execute Gboard's
   notification center or the real manual-incognito integration. Gradle uses the real
   production predicate; pure policy tests independently cover incognito suppression.
 - 15 existing toolbar fallback/binding tests pass with current toolbar sources and the
-  existing standalone harness's settings/editing support classes. Total: 33 tests passed.
+  existing standalone harness's settings/editing support classes. Total: 34 tests passed.
 - Full Gradle tests/build were attempted but the wrapper cannot download Gradle 9.6.1
   through Java's network path in this environment. Patch transformation, D8/ABI inventory,
-  registry contract execution and full integration build remain pending.
+  registry contract execution and full integration build could not run locally.
+- GitHub Actions run `40108729958` passed the full extension/calculator tests, patch checks,
+  Android bundle build and Morphe release-bundle import check (before the final theme-context
+  refinement). It uploaded the review `.mpp` and test reports. The final commit is revalidated
+  by the same workflow. No original-APK transformation or physical validation is implied.
 
 ## Physical acceptance matrix (all pending)
 

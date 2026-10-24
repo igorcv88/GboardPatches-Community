@@ -39,6 +39,7 @@ public class TermuxClipboardSuggestionRuntimeTest {
         public EditorInfo m;
         public List<?> k = List.of();
         public boolean o;
+        public Object l;
         int stockClicks;
         public View y(Context context, fih clip, boolean sensitive, int layout, boolean only, ppe surface) {
             View view = new View(context);
@@ -111,6 +112,17 @@ public class TermuxClipboardSuggestionRuntimeTest {
         copy("copied info", false); open(); assertNotNull(qjr.latest);
         ime.info.fieldId = 99; qjr.latest.views.get(0).performClick();
         assertTrue(ime.inserted.isEmpty());
+    }
+    public static class ThemeModule {
+        final Context context;
+        ThemeModule(Context context) { this.context = context; }
+        public Context a() { return context; }
+    }
+    @Test public void nativeChipUsesTheActiveKeyboardThemeContext() {
+        Context themed = new android.view.ContextThemeWrapper(ime, android.R.style.Theme_Material);
+        helper.l = new ThemeModule(themed);
+        copy("theme", false); open();
+        assertSame(themed, qjr.latest.views.get(0).getContext());
     }
     @Test public void ordinaryEditorsKeepStockPathAndConnection() {
         copy("ordinary", false); ime.info.packageName = "ordinary.editor";

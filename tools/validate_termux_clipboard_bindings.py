@@ -24,7 +24,7 @@ METHODS = {
     "Lnpc;": {("u", "(Ljava/lang/String;Ljava/lang/String;Landroid/view/inputmethod/EditorInfo;)Z")},
 }
 FIELDS = {
-    "Lfif;": {("m", "Landroid/view/inputmethod/EditorInfo;"), ("k", "Lvvw;"), ("o", "Z")},
+    "Lfif;": {("m", "Landroid/view/inputmethod/EditorInfo;"), ("k", "Lvvw;"), ("o", "Z"), ("l", "Loru;")},
     "Lfih;": {("e", "Lj$/time/Instant;")},
     "Lppe;": {("a", "Lppe;")}, "Lpfz;": {("c", "Lpfz;")}, "Lqjw;": {("c", "Lqjw;")},
 }
