@@ -21,6 +21,9 @@ jobs:
           java-version: '21'
           cache: gradle
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - name: Test and build review bundle
         env:
           GITHUB_ACTOR: ${{ github.repository_owner }}
