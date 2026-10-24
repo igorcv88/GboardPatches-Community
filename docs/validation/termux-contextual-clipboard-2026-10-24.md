@@ -105,19 +105,22 @@ Two concrete implementation gaps were found:
 - A non-null chip plus matching source was treated as already displayed. Native dispatch
   can return while no view is attached or visible. r2 checks attachment, visibility and
   positive dimensions; a pending candidate is republished after actual header initialization
-  or layout, with at most three dispatches per copy/session. No timer polling is used.
+  or layout, with at most three dispatches per copy/session. No timer polling is used. Visibility also requires a nonempty global visible rectangle,
+  a visible window and nonzero alpha through the ancestor chain; attached children fully
+  clipped by a collapsed header do not count as visible.
 
 A hook at entry to the verified `Leso.y(View,ppe)` initialization captures the HEADER root,
 including sessions where no prediction list arrives. It does not modify this root, the
 native toolbar or arrow, EditorInfo, or terminal input policy. A temporary layout observer
-is removed on success, exhaustion or session cleanup. Candidate layout can still report
+is removed on success, expiration or session cleanup; after dispatch exhaustion it only
+observes visibility and cannot send more notifications. Candidate layout can still report
 later visibility after dispatch retries have stopped. The original paste/privacy guards
 are unchanged.
 
 These are verified code defects, **not proof of the specific cause on the device**.
 The revised bundle must pass a fresh physical test before acceptance.
 
-r2 host verification: 36 tests passed (13 adapter, 8 policy/ticket, 15 existing toolbar),
+r2 host verification: 37 tests passed (14 adapter, 8 policy/ticket, 15 existing toolbar),
 including a candidate deferred until the real HEADER root arrives, bounded dispatch when
 no holder accepts it, cleanup on leaving the session, and exclusion of clipboard text from
 logs. ABI check against the exact original APK passed for the header hook and per-surface

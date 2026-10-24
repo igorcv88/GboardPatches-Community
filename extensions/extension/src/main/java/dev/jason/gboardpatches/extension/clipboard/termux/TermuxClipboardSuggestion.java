@@ -41,7 +41,7 @@ public final class TermuxClipboardSuggestion {
         if (chip == null) { stopHeaderListener(); return; }
         if (actuallyVisible()) { status("visible"); stopHeaderListener(); }
         else if (publishAttempts < 3) scheduleRefresh();
-        else { status("pending-holder"); stopHeaderListener(); }
+        else status("pending-holder"); // Observe later visibility, but never dispatch beyond the cap.
     };
 
     /** Fixed state names only. Never logs text, clip labels, timestamp or exception messages. */
@@ -52,8 +52,15 @@ public final class TermuxClipboardSuggestion {
     }
 
     private static boolean actuallyVisible() {
-        return chip != null && chip.isAttachedToWindow() && chip.isShown()
-                && chip.getWidth() > 0 && chip.getHeight() > 0;
+        if (chip == null || !chip.isAttachedToWindow() || !chip.isShown()
+                || chip.getWindowVisibility() != View.VISIBLE
+                || chip.getWidth() <= 0 || chip.getHeight() <= 0) return false;
+        for (View view = chip; view != null; ) {
+            if (view.getAlpha() <= 0f) return false;
+            view = view.getParent() instanceof View parent ? parent : null;
+        }
+        android.graphics.Rect bounds = new android.graphics.Rect();
+        return chip.getGlobalVisibleRect(bounds) && !bounds.isEmpty();
     }
 
     /** Input view initialization, independent of prediction lists and clipboard notifications. */

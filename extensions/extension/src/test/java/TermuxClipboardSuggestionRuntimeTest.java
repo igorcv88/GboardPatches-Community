@@ -188,6 +188,28 @@ public class TermuxClipboardSuggestionRuntimeTest {
         requested.performClick(); assertEquals(List.of("deferred"), ime.inserted);
         activity.finish();
     }
+    @Test public void attachedButFullyClippedChipIsNotConsideredVisible() throws Exception {
+        android.app.Activity activity = Robolectric.buildActivity(android.app.Activity.class).setup().visible().get();
+        qjr.host = new android.widget.FrameLayout(activity); activity.setContentView(qjr.host);
+        copy("clipped", false); open();
+        View decor = activity.getWindow().getDecorView();
+        decor.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
+        decor.layout(0, 0, 400, 800);
+        View requested = qjr.latest.views.get(0);
+        // Robolectric does not drive the test IME window's visibility via WindowManager.
+        // Set the host attachment's window flag explicitly for these geometry assertions.
+        Object attachment = org.robolectric.util.ReflectionHelpers.getField(requested, "mAttachInfo");
+        org.robolectric.util.ReflectionHelpers.setField(attachment, "mWindowVisibility", View.VISIBLE);
+        qjr.host.layout(0, 0, 400, 0); requested.layout(0, 0, 100, 48);
+        assertTrue(requested.isAttachedToWindow()); assertTrue(requested.isShown());
+        java.lang.reflect.Method visible = TermuxClipboardSuggestion.class.getDeclaredMethod("actuallyVisible");
+        visible.setAccessible(true); assertEquals(false, visible.invoke(null));
+        qjr.host.layout(0, 0, 400, 100); requested.layout(0, 0, 100, 48);
+        assertEquals(true, visible.invoke(null));
+        qjr.host.setAlpha(0f); assertEquals(false, visible.invoke(null));
+        activity.finish();
+    }
     @Test public void permanentlyUnavailableHolderHasBoundedRetriesAndStopsAtSessionEnd() {
         android.app.Activity activity = Robolectric.buildActivity(android.app.Activity.class).setup().get();
         qjr.host = new android.widget.FrameLayout(activity); activity.setContentView(qjr.host);
