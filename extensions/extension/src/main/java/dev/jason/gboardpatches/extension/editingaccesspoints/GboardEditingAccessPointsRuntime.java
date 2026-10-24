@@ -48,6 +48,7 @@ public final class GboardEditingAccessPointsRuntime {
         try {
             if (receiver instanceof InputMethodService ime) {
                 service = new WeakReference<>(ime);
+                dev.jason.gboardpatches.extension.clipboard.TermuxClipboardSuggestion.start(ime);
                 WeakReference<InputMethodService> reference = service;
                 editor = new EditorActionSession.Editor() {
                     @Override public android.view.inputmethod.InputConnection connection() {
@@ -87,6 +88,7 @@ public final class GboardEditingAccessPointsRuntime {
     }
 
     public static void end() {
+        dev.jason.gboardpatches.extension.clipboard.TermuxClipboardSuggestion.suspend();
         try {
             String counters = JournalingInputConnection.drainCounters();
             if (counters != null) android.util.Log.i("GboardPatches", "Undo journal session: " + counters);

@@ -2,6 +2,7 @@ package dev.jason.gboardpatches.patches.gboard.registry
 
 import dev.jason.gboardpatches.patches.gboard.features.editingaccesspoints.gboardEditingAccessPointsLifecyclePatch
 import dev.jason.gboardpatches.patches.gboard.features.editingaccesspoints.gboardEditingAccessPointsFeatureMarkerPatch
+import dev.jason.gboardpatches.patches.gboard.features.clipboard.gboardTermuxClipboardSuggestionPatch
 import dev.jason.gboardpatches.patches.gboard.features.clipboard.gboardTermuxClipboardDiagnosticsPatch
 import dev.jason.gboardpatches.patches.gboard.shared.accesspoint.gboardAccessPointContributions1803Patch
 import dev.jason.gboardpatches.patches.gboard.shared.generated.GboardTargetAdmission
@@ -20,6 +21,7 @@ class GboardEditingAccessPointsPatchContractTest {
         assertTrue(patch.dependencies.contains(gboardEditingAccessPointsLifecyclePatch))
         assertTrue(patch.dependencies.contains(gboardEditingAccessPointsFeatureMarkerPatch))
         assertTrue(patch.dependencies.contains(gboardTermuxClipboardDiagnosticsPatch))
+        assertTrue(patch.dependencies.contains(gboardTermuxClipboardSuggestionPatch))
         assertTrue(patch.dependencies.contains(gboardAccessPointContributions1803Patch))
         val publicNames = GboardPublishedPatchCatalog.morpheRegistrations.mapNotNull { it.name }
         assertTrue(patch.dependencies.none { it.name in publicNames })
@@ -28,6 +30,12 @@ class GboardEditingAccessPointsPatchContractTest {
     }
 
     @Test fun editorAbiDoesNotExposeObfuscatedTypes() {
+        assertEquals("(Ljava/lang/Object;Ljava/lang/Object;)V",
+            RuntimeAbiCatalog.abi(RuntimeCallId.TERMUX_CLIPBOARD_HEADER_PREPARED).descriptor)
+        assertEquals("(Ljava/lang/Object;)Z",
+            RuntimeAbiCatalog.abi(RuntimeCallId.TERMUX_CLIPBOARD_SUGGESTION).descriptor)
+        assertEquals("(Ljava/lang/Object;)V",
+            RuntimeAbiCatalog.abi(RuntimeCallId.TERMUX_CLIPBOARD_CLOSED).descriptor)
         assertEquals("(Ljava/lang/Object;)V",
             RuntimeAbiCatalog.abi(RuntimeCallId.EDITING_ACCESS_POINTS_START).descriptor)
         assertEquals("(IIII)V",
