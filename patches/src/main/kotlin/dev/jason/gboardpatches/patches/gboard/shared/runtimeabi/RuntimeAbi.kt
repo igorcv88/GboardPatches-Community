@@ -60,6 +60,8 @@ internal enum class RuntimeCallId(internal val encodedAbi: String) {
     TERMUX_CLIPBOARD_PREPARED("Ldev/jason/gboardpatches/extension/clipboard/TermuxClipboardDiagnostics;->prepared(Ljava/lang/Object;)V"),
     TERMUX_CLIPBOARD_REFRESHED("Ldev/jason/gboardpatches/extension/clipboard/TermuxClipboardDiagnostics;->refreshed(Ljava/lang/Object;)V"),
     TERMUX_CLIPBOARD_REQUESTED("Ldev/jason/gboardpatches/extension/clipboard/TermuxClipboardDiagnostics;->requested(Ljava/lang/Object;)V"),
+    TERMUX_CLIPBOARD_CREATION_ENTERED("Ldev/jason/gboardpatches/extension/clipboard/TermuxClipboardDiagnostics;->creationEntered(Ljava/lang/Object;)V"),
+    TERMUX_CLIPBOARD_CREATION_EXITED("Ldev/jason/gboardpatches/extension/clipboard/TermuxClipboardDiagnostics;->creationExited(Ljava/lang/Object;)V"),
     CLIPBOARD_SEARCH_OPENED("Ldev/jason/gboardpatches/extension/clipboard/ClipboardSearch1803Runtime;->opened(Ljava/lang/Object;)V"),
     CLIPBOARD_SEARCH_CLOSED("Ldev/jason/gboardpatches/extension/clipboard/ClipboardSearch1803Runtime;->closed(Ljava/lang/Object;)V"),
     CLIPBOARD_SEARCH_CHANGED("Ldev/jason/gboardpatches/extension/clipboard/ClipboardSearch1803Runtime;->changed(Ljava/lang/Object;)V"),
