@@ -30,6 +30,8 @@ class GboardEditingAccessPointsPatchContractTest {
     }
 
     @Test fun editorAbiDoesNotExposeObfuscatedTypes() {
+        assertEquals("(Ljava/lang/Object;Ljava/lang/Object;)V",
+            RuntimeAbiCatalog.abi(RuntimeCallId.TERMUX_CLIPBOARD_HEADER_PREPARED).descriptor)
         assertEquals("(Ljava/lang/Object;)Z",
             RuntimeAbiCatalog.abi(RuntimeCallId.TERMUX_CLIPBOARD_SUGGESTION).descriptor)
         assertEquals("(Ljava/lang/Object;)V",

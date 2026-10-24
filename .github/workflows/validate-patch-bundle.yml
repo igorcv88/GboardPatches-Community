@@ -30,7 +30,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.MORPHE_PACKAGES_TOKEN }}
         run: |
           test -n "$GITHUB_TOKEN" || { echo 'MORPHE_PACKAGES_TOKEN is required for the Morphe registry.'; exit 1; }
-          bash gradlew --build-cache -Pversion=0.0.0-review \
+          bash gradlew --build-cache -Pversion=0.0.0-review.${{ github.run_number }} \
             :extensions:extension:testDebugUnitTest :extensions:calculator:testDebugUnitTest \
             :patches:check :patches:buildAndroid :patches:verifyReleaseBundleImport
       - name: Upload review bundle

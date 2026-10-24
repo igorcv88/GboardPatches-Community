@@ -58,6 +58,7 @@ internal enum class RuntimeCallId(internal val encodedAbi: String) {
     CLIPBOARD_CONTENT_LIMIT_RUNTIME_APPLY_OVERRIDDEN_FLAG_VALUE("Ldev/jason/gboardpatches/extension/clipboardcontentlimit/GboardClipboardContentLimitRuntime;->applyOverriddenFlagValue(Ljava/lang/String;Ljava/lang/Object;)Ljava/lang/Object;"),
     CLOSE_PROACTIVE_SUGGESTIONS_RUNTIME_APPLY_FLAG_VALUE("Ldev/jason/gboardpatches/extension/closeproactivesuggestions/GboardCloseProactiveSuggestionsRuntime;->applyFlagValue(Ljava/lang/String;Ljava/lang/Object;)Ljava/lang/Object;"),
     TERMUX_CLIPBOARD_SUGGESTION("Ldev/jason/gboardpatches/extension/clipboard/TermuxClipboardSuggestion;->handle(Ljava/lang/Object;)Z"),
+    TERMUX_CLIPBOARD_HEADER_PREPARED("Ldev/jason/gboardpatches/extension/clipboard/TermuxClipboardSuggestion;->headerPrepared(Ljava/lang/Object;Ljava/lang/Object;)V"),
     TERMUX_CLIPBOARD_CLOSED("Ldev/jason/gboardpatches/extension/clipboard/TermuxClipboardSuggestion;->closed(Ljava/lang/Object;)V"),
     TERMUX_CLIPBOARD_PREPARED("Ldev/jason/gboardpatches/extension/clipboard/TermuxClipboardDiagnostics;->prepared(Ljava/lang/Object;)V"),
     TERMUX_CLIPBOARD_REFRESHED("Ldev/jason/gboardpatches/extension/clipboard/TermuxClipboardDiagnostics;->refreshed(Ljava/lang/Object;)V"),

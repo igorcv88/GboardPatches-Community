@@ -1,6 +1,6 @@
 # Termux latest-copy suggestion implementation
 
-Status: implementation PR; **physical S25 Ultra validation pending**. No patched APK,
+Status: first physical S25 Ultra test **failed** (fresh copy, no visible chip). Revision r2 awaits physical retest. No patched APK,
 Morphe transformation, successful device display, or terminal paste is claimed here.
 
 ## Strategy
@@ -19,7 +19,7 @@ Malformed/unrecognized EditorInfo also retains the stock path.
 
 The fallback reads `Lfif.k[0]` (no new clipboard manager, history, polling, database or
 logs), renders with the reviewed native `Lfif.y` text-chip layout, replaces its stock
-click listener **before publication**, builds `qju/qjv`, and publishes through `qjr.a`
+click listener **before publication**, builds `qju/qjv`, and publishes through the per-HEADER `qjr.c` map
 into the existing proactive suggestion holder. It adds no view bar, permanent button,
 toolbar replacement or arrow event handler. The fallback does not rely on a prediction
 engine or on `oru.a()` returning a themed context. It uses the native module theme context when available, with the active IME context as fallback.
@@ -89,3 +89,51 @@ Test with a harmless copy; disable the old diagnostic property if it remains ena
 The physical check must additionally confirm native holder selection, native chip theme,
 IME attached-dialog behavior on Android 17/One UI 9 and Termux's actual `commitText`
 semantics. A successful host test is not evidence these device checks passed.
+
+
+## Revision r2 after failed physical test
+
+The first bundle did not show a chip on the S25 Ultra even with a fresh copy. This
+supersedes host/CI success as acceptance evidence. The screen alone does not identify
+which runtime guard or native rendering step failed.
+
+Two concrete implementation gaps were found:
+
+- Publication used `qjr.a(qjv,pfz)`, whose native listener chooses a suitable surface or
+  caches a general pending candidate. Stock clipboard publication uses
+  `qjr.c(Map<ppe,qjv>,pfz)`. r2 targets `ppe.a` (`HEADER`) explicitly through that path.
+- A non-null chip plus matching source was treated as already displayed. Native dispatch
+  can return while no view is attached or visible. r2 checks attachment, visibility and
+  positive dimensions; a pending candidate is republished after actual header initialization
+  or layout, with at most three dispatches per copy/session. No timer polling is used.
+
+A hook at entry to the verified `Leso.y(View,ppe)` initialization captures the HEADER root,
+including sessions where no prediction list arrives. It does not modify this root, the
+native toolbar or arrow, EditorInfo, or terminal input policy. A temporary layout observer
+is removed on success, exhaustion or session cleanup. Candidate layout can still report
+later visibility after dispatch retries have stopped. The original paste/privacy guards
+are unchanged.
+
+These are verified code defects, **not proof of the specific cause on the device**.
+The revised bundle must pass a fresh physical test before acceptance.
+
+r2 host verification: 36 tests passed (13 adapter, 8 policy/ticket, 15 existing toolbar),
+including a candidate deferred until the real HEADER root arrives, bounded dispatch when
+no holder accepts it, cleanup on leaving the session, and exclusion of clipboard text from
+logs. ABI check against the exact original APK passed for the header hook and per-surface
+publication overload. Full CI runs again for the revision.
+
+The review bundle now has a run-specific version (`0.0.0-review.<run number>`) so successive
+imports can be distinguished. State logs use `GboardTermuxClip` and the prefix `r2`:
+`session-bound`, `waiting-session-helper`, `editor-mismatch`, `private-session`,
+`disabled-by-editor`, `device-not-unlocked`, `source-empty`, `sensitive-source`,
+`source-policy-blocked`, `chip-built`, `requested-header`, `pending-holder`, `visible`, or
+`binding-failed:<exception class>`. No text, labels, raw timestamps, paths, or exception
+messages are logged. The names distinguish attempted delivery from observed visibility.
+
+If the r2 physical test still fails, its existing state logs can be collected without
+another instrumented APK or another clipboard-availability investigation:
+
+```sh
+su -c 'logcat -d -v threadtime -s GboardTermuxClip:I "*:S"' > /sdcard/Download/gboard_termux_r2.txt
+```

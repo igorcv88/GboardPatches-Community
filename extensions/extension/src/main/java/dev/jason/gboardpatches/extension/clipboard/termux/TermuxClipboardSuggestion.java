@@ -5,6 +5,8 @@ import android.inputmethodservice.InputMethodService;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
+import android.view.ViewTreeObserver;
+import java.util.Map;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
@@ -26,6 +28,68 @@ public final class TermuxClipboardSuggestion {
     private static Object category;
     private static AlertDialog confirmation;
     private static Runnable expiry;
+    private static Object suggestion, primarySurface;
+    private static int publishAttempts;
+    private static WeakReference<View> header = new WeakReference<>(null);
+    private static boolean headerListening, refreshPosted;
+    private static String lastStatus;
+    private static boolean admittedSession;
+    private static final View.OnLayoutChangeListener CHIP_LAYOUT = (view, l, t, r, b, ol, ot, or, ob) -> {
+        if (view == chip && actuallyVisible()) { status("visible"); stopHeaderListener(); }
+    };
+    private static final ViewTreeObserver.OnGlobalLayoutListener HEADER_LAYOUT = () -> {
+        if (chip == null) { stopHeaderListener(); return; }
+        if (actuallyVisible()) { status("visible"); stopHeaderListener(); }
+        else if (publishAttempts < 3) scheduleRefresh();
+        else { status("pending-holder"); stopHeaderListener(); }
+    };
+
+    /** Fixed state names only. Never logs text, clip labels, timestamp or exception messages. */
+    private static void status(String state) {
+        if (!admittedSession || state.equals(lastStatus)) return;
+        lastStatus = state;
+        android.util.Log.i("GboardTermuxClip", "r2 " + state);
+    }
+
+    private static boolean actuallyVisible() {
+        return chip != null && chip.isAttachedToWindow() && chip.isShown()
+                && chip.getWidth() > 0 && chip.getHeight() > 0;
+    }
+
+    /** Input view initialization, independent of prediction lists and clipboard notifications. */
+    public static void headerPrepared(Object view, Object surface) {
+        if (!(view instanceof View root) || !(surface instanceof Enum<?> kind)
+                || !"HEADER".equals(kind.name())) return;
+        stopHeaderListener();
+        header = new WeakReference<>(root);
+        if (service.get() != null) {
+            watchHeader(); scheduleRefresh();
+        }
+    }
+
+    private static void watchHeader() {
+        View root = header.get();
+        if (root != null && !headerListening) {
+            root.getViewTreeObserver().addOnGlobalLayoutListener(HEADER_LAYOUT);
+            headerListening = true;
+        }
+    }
+    private static void stopHeaderListener() {
+        View root = header.get();
+        if (root != null && headerListening && root.getViewTreeObserver().isAlive()) {
+            root.getViewTreeObserver().removeOnGlobalLayoutListener(HEADER_LAYOUT);
+        }
+        headerListening = false;
+    }
+    private static void scheduleRefresh() {
+        if (refreshPosted) return;
+        refreshPosted = true;
+        InputMethodService expected = service.get();
+        UI.post(() -> {
+            refreshPosted = false;
+            if (expected != null && service.get() == expected) refresh();
+        });
+    }
 
     private TermuxClipboardSuggestion() { }
 
@@ -41,6 +105,7 @@ public final class TermuxClipboardSuggestion {
             return true;
         }
         try {
+            admittedSession = true;
             if (helper.get() != value) { clear(); helper = new WeakReference<>(value); }
             refresh();
         } catch (Throwable ignored) { clear(); }
@@ -51,12 +116,16 @@ public final class TermuxClipboardSuggestion {
     public static void start(Object receiver) {
         if (!(receiver instanceof InputMethodService ime)) return;
         service = new WeakReference<>(ime);
+        EditorInfo info = ime.getCurrentInputEditorInfo();
+        if (info != null && "com.termux".equals(info.packageName)) {
+            admittedSession = true; lastStatus = null; status("session-bound"); watchHeader();
+        }
         // Native t/x can precede onStartInputView's exit. Coalesce after the view is ready.
         Object expected = helper.get();
         UI.post(() -> { if (service.get() == ime && helper.get() == expected) refresh(); });
     }
 
-    public static void suspend() { clear(); service.clear(); }
+    public static void suspend() { clear(); service.clear(); admittedSession = false; }
 
     public static void closed(Object value) {
         if (helper.get() != value) return;
@@ -66,32 +135,32 @@ public final class TermuxClipboardSuggestion {
     private static Source source() throws Exception {
         Object owner = helper.get();
         InputMethodService ime = service.get();
-        if (owner == null || ime == null) return null;
+        if (owner == null || ime == null) { status("waiting-session-helper"); return null; }
         EditorInfo info = (EditorInfo) field(owner, "m");
         EditorInfo current = ime.getCurrentInputEditorInfo();
         // Gboard may pass an EditorInfo copy to modules. Compare editor identity fields,
         // not object identity; the active connection and lifecycle ticket guard insertion.
         if (info == null || current == null || !"com.termux".equals(info.packageName)
                 || !"com.termux".equals(current.packageName) || info.inputType != 0
-                || current.inputType != 0 || info.fieldId != current.fieldId) return null;
+                || current.inputType != 0 || info.fieldId != current.fieldId) { status("editor-mismatch"); return null; }
         // Check privacy before obtaining any text. o is the native session-incognito argument.
         if (Boolean.TRUE.equals(field(owner, "o"))
                 || GboardManualIncognitoRuntime.applyIncognitoPredicate(false)
-                || ((info.imeOptions | current.imeOptions) & EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0) return null;
+                || ((info.imeOptions | current.imeOptions) & EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0) { status("private-session"); return null; }
         ClassLoader loader = owner.getClass().getClassLoader();
         boolean disabled = (Boolean) invokeStatic(loader, "npc", "u",
                 new Class<?>[]{String.class, String.class, EditorInfo.class}, null, "disableAutoPaste", info);
         boolean unlocked = (Boolean) invokeStatic(loader, "qqw", "e", new Class<?>[0]);
-        if (disabled || !unlocked) return null;
+        if (disabled || !unlocked) { status(disabled ? "disabled-by-editor" : "device-not-unlocked"); return null; }
         Object clips = field(owner, "k");
-        if (!(clips instanceof List<?> list) || list.isEmpty()) return null;
+        if (!(clips instanceof List<?> list) || list.isEmpty()) { status("source-empty"); return null; }
         Object clip = list.get(0);
-        if (!Boolean.FALSE.equals(call(clip, "m", new Class<?>[0]))) return null;
+        if (!Boolean.FALSE.equals(call(clip, "m", new Class<?>[0]))) { status("sensitive-source"); return null; }
         Object instant = field(clip, "e");
         long copiedAt = (Long) call(instant, "toEpochMilli", new Class<?>[0]);
         String text = (String) call(clip, "i", new Class<?>[0]);
         if (!TermuxClipboardPolicy.eligible(info.packageName, info.inputType, info.imeOptions,
-                false, false, disabled, unlocked, text, copiedAt, System.currentTimeMillis())) return null;
+                false, false, disabled, unlocked, text, copiedAt, System.currentTimeMillis())) { status("source-policy-blocked"); return null; }
         InputConnection connection = ime.getCurrentInputConnection();
         return connection == null ? null : new Source(owner, ime, clip, text, copiedAt, connection);
     }
@@ -102,11 +171,14 @@ public final class TermuxClipboardSuggestion {
             if (source == null) { clear(); return; }
             long ticket = TICKET.offer(source.clip);
             if (!TICKET.active(ticket)) return;
-            if (displayedSource == source.clip && chip != null) return;
+            if (displayedSource == source.clip && chip != null) {
+                if (actuallyVisible()) { status("visible"); stopHeaderListener(); return; }
+                publish(source); return;
+            }
             clearSurface();
             ClassLoader loader = source.owner.getClass().getClassLoader();
             Class<?> surface = loader.loadClass("ppe");
-            Object primarySurface = staticField(surface, "a");
+            primarySurface = staticField(surface, "a");
             Class<?> nativeClip = loader.loadClass("fih");
             // Reviewed private native text-chip builder; replace its listener BEFORE publication.
             android.content.Context themedContext = source.ime;
@@ -121,6 +193,7 @@ public final class TermuxClipboardSuggestion {
                     themedContext, source.clip, false, 2, true, primarySurface);
             if (view == null) { clear(); return; }
             view.setVisibility(View.VISIBLE);
+            view.addOnLayoutChangeListener(CHIP_LAYOUT);
             view.setOnLongClickListener(null);
             view.setOnClickListener(v -> clicked(ticket));
             java.lang.reflect.Constructor<?> constructor = loader.loadClass("qju").getDeclaredConstructor();
@@ -131,15 +204,30 @@ public final class TermuxClipboardSuggestion {
             call(builder, "b", new Class<?>[]{categoryType}, clipboardCategory);
             call(builder, "d", new Class<?>[]{String.class}, "clipboard");
             call(builder, "e", new Class<?>[]{List.class}, List.of(view));
-            Object suggestion = call(builder, "a", new Class<?>[0]);
-            Class<?> priority = loader.loadClass("pfz");
+            suggestion = call(builder, "a", new Class<?>[0]);
             chip = view; displayedSource = source.clip; category = clipboardCategory;
-            invokeStatic(loader, "qjr", "a", new Class<?>[]{loader.loadClass("qjv"), priority},
-                    suggestion, staticField(priority, "c"));
+            status("chip-built");
+            publish(source);
             long delay = Math.max(1, source.copiedAt + TermuxClipboardPolicy.MAX_AGE_MS - System.currentTimeMillis() + 1);
             expiry = () -> { if (TICKET.active(ticket)) clear(); };
             UI.postDelayed(expiry, delay);
-        } catch (Throwable ignored) { clear(); }
+        } catch (Throwable failure) {
+            status("binding-failed:" + failure.getClass().getSimpleName()); clear();
+        }
+    }
+
+    private static void publish(Source source) throws Exception {
+        if (publishAttempts >= 3) { status("pending-holder"); return; }
+        publishAttempts++;
+        watchHeader();
+        ClassLoader loader = source.owner.getClass().getClassLoader();
+        Class<?> priority = loader.loadClass("pfz");
+        // The stock clipboard uses the per-surface overload. The single-suggestion overload
+        // performs holder selection and may defer to a different/unavailable surface.
+        invokeStatic(loader, "qjr", "c", new Class<?>[]{Map.class, priority},
+                Map.of(primarySurface, suggestion), staticField(priority, "c"));
+        status(actuallyVisible() ? "visible" : "requested-header");
+        if (actuallyVisible()) stopHeaderListener();
     }
 
     private static void clicked(long ticket) {
@@ -185,10 +273,12 @@ public final class TermuxClipboardSuggestion {
     private static void clear() { TICKET.invalidate(); clearSurface(); }
 
     private static void clearSurface() {
+        stopHeaderListener();
+        suggestion = null; primarySurface = null; publishAttempts = 0;
         if (expiry != null) UI.removeCallbacks(expiry);
         expiry = null;
         if (confirmation != null) { confirmation.dismiss(); confirmation = null; }
-        if (chip != null) { chip.setOnClickListener(null); chip = null; }
+        if (chip != null) { chip.removeOnLayoutChangeListener(CHIP_LAYOUT); chip.setOnClickListener(null); chip = null; }
         displayedSource = null;
         Object oldCategory = category; category = null;
         if (oldCategory != null) {

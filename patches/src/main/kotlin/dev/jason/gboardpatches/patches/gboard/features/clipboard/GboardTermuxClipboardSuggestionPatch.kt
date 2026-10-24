@@ -31,6 +31,13 @@ internal val gboardTermuxClipboardSuggestionPatch = bytecodePatch(
             :gboard_termux_clipboard_stock
             nop
         """.trimIndent())
+        // Capture the real HEADER root even when no prediction list is ever delivered.
+        // y(View,ppe) is the verified common initialization used by eL/e in 18.0.3.
+        val header = findMutableMethodOrThrow("Leso;", "y", "V", listOf("Landroid/view/View;", "Lppe;"))
+        val ready = RuntimeCallId.TERMUX_CLIPBOARD_HEADER_PREPARED
+        val readyCalls = header.implementation!!.instructions.count { it.isMethodReference(ready.encodedAbi) }
+        check(readyCalls <= 1) { "Duplicate Termux clipboard header binding" }
+        if (readyCalls == 0) header.addInstructions(0, RuntimeCallEmitter.invoke(ready, "p1 .. p2"))
         val close = findMutableMethodOrThrow("Lfif;", "l", "V", emptyList())
         val closeCall = RuntimeCallId.TERMUX_CLIPBOARD_CLOSED
         val closes = close.implementation!!.instructions.count { it.isMethodReference(closeCall.encodedAbi) }

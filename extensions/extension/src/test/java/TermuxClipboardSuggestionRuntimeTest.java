@@ -43,6 +43,7 @@ public class TermuxClipboardSuggestionRuntimeTest {
         int stockClicks;
         public View y(Context context, fih clip, boolean sensitive, int layout, boolean only, ppe surface) {
             View view = new View(context);
+            view.setMinimumWidth(100); view.setMinimumHeight(48);
             view.setOnClickListener(v -> stockClicks++);
             return view;
         }
@@ -51,7 +52,7 @@ public class TermuxClipboardSuggestionRuntimeTest {
     private Helper helper;
     @Before public void setUp() {
         TermuxClipboardSuggestion.suspend();
-        qjr.latest = null; qjr.host = null; qjq.clears = 0; npc.disabled = false; qqw.unlocked = true;
+        qjr.latest = null; qjr.host = null; qjr.requests = 0; qjr.defer = false; qjq.clears = 0; npc.disabled = false; qqw.unlocked = true;
         ime = Robolectric.buildService(Ime.class).create().get();
         ime.info = new EditorInfo(); ime.info.packageName = "com.termux";
         helper = new Helper(); helper.m = ime.info;
@@ -167,6 +168,48 @@ public class TermuxClipboardSuggestionRuntimeTest {
         qjr.latest.views.get(0).performClick(); assertEquals(List.of("new"), ime.inserted);
         activity.finish();
     }
+    @Test public void deferredRequestIsRetriedAfterActualHeaderInitialization() {
+        copy("deferred", false); open();
+        View requested = qjr.latest.views.get(0);
+        assertNull(requested.getParent()); assertEquals(1, qjr.requests);
+        android.app.Activity activity = Robolectric.buildActivity(android.app.Activity.class).setup().get();
+        qjr.host = new android.widget.FrameLayout(activity); activity.setContentView(qjr.host);
+        TermuxClipboardSuggestion.headerPrepared(qjr.host, ppe.a);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertSame(requested, qjr.host.getChildAt(0));
+        qjr.host.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(100, View.MeasureSpec.EXACTLY));
+        qjr.host.layout(0, 0, 400, 100);
+        qjr.host.getViewTreeObserver().dispatchOnGlobalLayout();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        int attempts = qjr.requests;
+        TermuxClipboardSuggestion.handle(helper);
+        assertEquals(attempts, qjr.requests);
+        requested.performClick(); assertEquals(List.of("deferred"), ime.inserted);
+        activity.finish();
+    }
+    @Test public void permanentlyUnavailableHolderHasBoundedRetriesAndStopsAtSessionEnd() {
+        android.app.Activity activity = Robolectric.buildActivity(android.app.Activity.class).setup().get();
+        qjr.host = new android.widget.FrameLayout(activity); activity.setContentView(qjr.host);
+        qjr.defer = true;
+        copy("never log this text", false); open();
+        TermuxClipboardSuggestion.headerPrepared(qjr.host, ppe.a);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        for (int i = 0; i < 10; i++) {
+            qjr.host.getViewTreeObserver().dispatchOnGlobalLayout();
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+        }
+        assertEquals(3, qjr.requests);
+        assertNull(qjr.latest.views.get(0).getParent());
+        TermuxClipboardSuggestion.suspend();
+        qjr.host.getViewTreeObserver().dispatchOnGlobalLayout();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(3, qjr.requests); assertTrue(ime.inserted.isEmpty());
+        for (org.robolectric.shadows.ShadowLog.LogItem log : org.robolectric.shadows.ShadowLog.getLogsForTag("GboardTermuxClip")) {
+            assertFalse(log.msg.contains("never log this text"));
+        }
+        activity.finish();
+    }
     @Test public void privacyChangeAfterRenderPreventsInsertion() {
         copy("visible", false); open(); View old = qjr.latest.views.get(0);
         helper.o = true; old.performClick(); assertTrue(ime.inserted.isEmpty());
@@ -175,7 +218,7 @@ public class TermuxClipboardSuggestionRuntimeTest {
     }
 }
 
-enum ppe { a }
+enum ppe { HEADER; static final ppe a = HEADER; }
 enum qjw { c }
 class npc {
     static boolean disabled;
@@ -199,9 +242,15 @@ class qju {
 class qjr {
     static qjv latest;
     static android.widget.FrameLayout host;
+    static int requests;
+    static boolean defer;
     public static void a(qjv value, pfz priority) {
-        latest = value;
-        if (host != null) { host.removeAllViews(); host.addView(value.views.get(0)); }
+        throw new AssertionError("Single-suggestion overload must not be used for Termux");
+    }
+    public static void c(java.util.Map<ppe, qjv> bySurface, pfz priority) {
+        assertEquals(1, bySurface.size()); assertTrue(bySurface.containsKey(ppe.a));
+        latest = bySurface.get(ppe.a); requests++;
+        if (host != null && !defer) { host.removeAllViews(); host.addView(latest.views.get(0)); }
     }
 }
 class qjq {
