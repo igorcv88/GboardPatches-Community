@@ -79,3 +79,18 @@ the trace locates it. This PR intentionally makes no candidate or terminal behav
 Performance: when disabled, one isLoggable check at native helper lifecycle exits. When
 enabled, fixed field reads and state-change logs, no polling or per-frame listener. Device
 latency/framestats were not measured.
+
+## Complemento do trace físico de 24/10/2026
+
+O primeiro arquivo enviado do S25 Ultra produziu apenas `stage=0` com estados `1`, `9` e `9`. O estado `9` prova fonte não vazia no `TYPE_NULL`, mas não houve chip construído (bit 16), prioridade escolhida (bit 32), nem eventos `stage=1/2` nesta coleta. Não prova ainda se `Lfif.x()` foi chamado.
+
+O próximo patch acrescenta dois observadores sem alterar o resultado nativo de `Lfif.x()Z`:
+
+| Stage | Significado |
+| --- | --- |
+| 3 | Entrada na tentativa de construir o candidato nativo (`Lfif.x`) |
+| 4 | Saída normal de `Lfif.x` (sem registrar o valor de retorno) |
+
+Interpretação: com fonte não vazia, ausência dos estágios 3/4 aponta para o gatilho/ciclo de vida anterior a `x`; presença dos estágios 3/4 sem bit 16 aponta para algum veto dentro da criação; presença do bit 16 sem exibição exige rastrear seleção de prioridade e holder. A sonda não conhece o motivo específico do veto e não autoriza desbloqueá-lo. Mantém os mesmos filtros de pacote, `TYPE_NULL`/visible-password, propriedade `log.tag.GboardClipTrace` e ausência de conteúdo sensível.
+
+Após incorporar e compilar o patch, repetir exatamente o procedimento documentado, copiando texto curto antes de abrir Termux e depois durante uma sessão aberta.
