@@ -48,7 +48,7 @@ public final class TermuxClipboardSuggestion {
     private static void status(String state) {
         if (!admittedSession || state.equals(lastStatus)) return;
         lastStatus = state;
-        android.util.Log.i("GboardTermuxClip", "r2 " + state);
+        android.util.Log.i("GboardTermuxClip", "r3 " + state);
     }
 
     private static boolean actuallyVisible() {
@@ -150,10 +150,16 @@ public final class TermuxClipboardSuggestion {
         if (info == null || current == null || !"com.termux".equals(info.packageName)
                 || !"com.termux".equals(current.packageName) || info.inputType != 0
                 || current.inputType != 0 || info.fieldId != current.fieldId) { status("editor-mismatch"); return null; }
-        // Check privacy before obtaining any text. o is the native session-incognito argument.
-        if (Boolean.TRUE.equals(field(owner, "o"))
-                || GboardManualIncognitoRuntime.applyIncognitoPredicate(false)
-                || ((info.imeOptions | current.imeOptions) & EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0) { status("private-session"); return null; }
+        // Lfif.o selects the InputContextNotification branch. Its producer is the
+        // EditorInfo identity comparison in Lnvk.I, NOT an incognito predicate.
+        // Stock Leqy.G uses IME_FLAG_NO_PERSONALIZED_LEARNING; the extension adds
+        // its latched manual-incognito state. Check both EditorInfo copies before text.
+        if (GboardManualIncognitoRuntime.applyIncognitoPredicate(false)) {
+            status("private-manual-incognito"); return null;
+        }
+        if (((info.imeOptions | current.imeOptions) & EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0) {
+            status("private-editor"); return null;
+        }
         ClassLoader loader = owner.getClass().getClassLoader();
         boolean disabled = (Boolean) invokeStatic(loader, "npc", "u",
                 new Class<?>[]{String.class, String.class, EditorInfo.class}, null, "disableAutoPaste", info);

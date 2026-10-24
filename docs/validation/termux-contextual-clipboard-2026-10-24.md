@@ -1,6 +1,6 @@
 # Termux latest-copy suggestion implementation
 
-Status: first physical S25 Ultra test **failed** (fresh copy, no visible chip). Revision r2 awaits physical retest. No patched APK,
+Status: r1 and r2 **failed physically**. The r2 device log stops at `private-session`. Revision r3 corrects a misidentified native flag; physical retest pending. No patched APK,
 Morphe transformation, successful device display, or terminal paste is claimed here.
 
 ## Strategy
@@ -33,7 +33,7 @@ recheck runs immediately before insertion. The ticket is consumed before one
 
 Native last-copy expiration (two minutes) is preserved and enforced by one cancellable
 expiry callback. Empty clips, clips over one million UTF-16 code units, sensitive clips,
-incognito (native helper flag or manual predicate), no-personalized-learning editors,
+incognito (the native EditorInfo privacy flag or the latched manual predicate), no-personalized-learning editors,
 `disableAutoPaste`, locked-device readiness and unavailable bindings are suppressed.
 The incognito exception allowing manual clipboard browsing does not enable this chip.
 C0/C1 controls and DEL are refused, except CR/LF/TAB. CR/LF/TAB and Unicode line separators
@@ -140,3 +140,55 @@ another instrumented APK or another clipboard-availability investigation:
 ```sh
 su -c 'logcat -d -v threadtime -s GboardTermuxClip:I "*:S"' > /sdcard/Download/gboard_termux_r2.txt
 ```
+
+
+## Revision r3: incorrect privacy guard identified
+
+The physical r2 log supplied on 24 October contains `session-bound` followed by
+`private-session` on every attempt, and never reaches `chip-built`. This establishes
+that the implementation's privacy gate blocked candidate construction before display;
+it does not by itself distinguish the three conditions combined under that state.
+
+Binary inspection identified a definite error in that gate: `Lfif.o` is **not** an
+incognito flag. In the exact original APK, `Lnvk.I(Lnvq;Lnve;Map)Z` obtains two EditorInfo
+objects through `Lnvl.dn()` and `Lnvl.S()`, compares their **identity**, and passes that
+boolean as the fourth argument to `Lnvo`'s constructor. `Lnvo.a()` forwards it to
+`Lnvs.fn`; `Lfjz.fn` passes it to `Lfif.t`, which stores it in `Lfif.o`.
+
+The observed producer is:
+
+```text
+v3 = Lnvl.dn()  // EditorInfo
+v9 = Lnvl.S()   // EditorInfo
+v4 = (v3 == v9)
+new Lnvo(extension, inputContext, v3, v4, map, callback)
+```
+
+`Lfie.a(Loqf)` reads this flag for the first InputContextNotification payload, while
+`Lfie.b(Loqf)` reads its inverse for the second payload. A normal input session can have
+this flag true. r1/r2 incorrectly rejected such sessions as private. Their adapter test
+double defaulted the flag to false, hiding the false positive; it now defaults to true.
+
+The real stock incognito predicate is `Leqy.G()Z`: read the active EditorInfo's
+`imeOptions` and test `0x01000000` (`IME_FLAG_NO_PERSONALIZED_LEARNING`). r3 preserves that
+check on **both** EditorInfo copies and independently preserves the extension's latched
+manual-incognito predicate. It removes only the incorrect use of `Lfif.o`. Sensitive
+source suppression, locked-device readiness, disableAutoPaste, terminal input shape,
+connection/session checks and multiline safeguards are unchanged.
+
+r3 logs separate `private-editor` from `private-manual-incognito`, and use prefix `r3`.
+No copied content is logged. A real private session remains blocked, including manual
+incognito that permits browsing the clipboard panel: this automatic suggestion stays off.
+
+41 local tests passed: 18 adapter, 8 policy/ticket and 15 toolbar tests. New regression
+coverage includes normal context-selection=true with a successful single paste, manual
+incognito before/after publication, manual incognito with clipboard browsing permitted,
+and a private module EditorInfo copy. All existing normal-session adapter tests now use
+context-selection=true. The standalone harness uses the real session-policy class plus
+a minimal runtime stub whose predicate matches production; full CI runs these tests with
+the real production manual-incognito runtime. The exact-APK validator also verifies the
+activation producer and the real stock incognito predicate.
+
+The provided log and native producer explain a concrete false-positive privacy condition.
+This is a functional correction in PR #26, not a diagnostic-only PR. Physical success of
+r3 is still unclaimed until the device test.

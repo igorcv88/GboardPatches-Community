@@ -11,6 +11,8 @@ from androguard.core.dex import DEX
 EXPECTED_SHA256 = "3099262121a201dcb2ae7e185bee6b2057287a5aeffae4be0e30f537e505e5b3"
 # Every obfuscated method called by the production adapter, plus the patched entry/exit.
 METHODS = {
+    "Leqy;": {("G", "()Z")},
+    "Lnvk;": {("I", "(Lnvq;Lnve;Ljava/util/Map;)Z")},
     "Lfif;": {
         ("x", "()Z"), ("l", "()V"),
         ("y", "(Landroid/content/Context;Lfih;ZIZLppe;)Landroid/view/View;"),
@@ -25,7 +27,7 @@ METHODS = {
     "Lnpc;": {("u", "(Ljava/lang/String;Ljava/lang/String;Landroid/view/inputmethod/EditorInfo;)Z")},
 }
 FIELDS = {
-    "Lfif;": {("m", "Landroid/view/inputmethod/EditorInfo;"), ("k", "Lvvw;"), ("o", "Z"), ("l", "Loru;")},
+    "Lfif;": {("m", "Landroid/view/inputmethod/EditorInfo;"), ("k", "Lvvw;"), ("l", "Loru;")},
     "Lfih;": {("e", "Lj$/time/Instant;")},
     "Lppe;": {("a", "Lppe;")}, "Lpfz;": {("c", "Lpfz;")}, "Lqjw;": {("c", "Lqjw;")},
 }
@@ -50,6 +52,16 @@ def main(path):
     creation = next(m for m in found["Lfif;"].get_methods() if m.get_name() == "x")
     assert creation.get_code().get_registers_size() == 13
     assert next(creation.get_instructions()).get_name() == "iget-object"
+    activation = next(m for m in found["Lnvk;"].get_methods() if m.get_name() == "I")
+    activation_code = [i.get_output() for i in activation.get_instructions()]
+    assert any("Lnvl;->dn()Landroid/view/inputmethod/EditorInfo;" in i for i in activation_code)
+    assert any("Lnvl;->S()Landroid/view/inputmethod/EditorInfo;" in i for i in activation_code)
+    assert any(i.get_name() == "if-ne" for i in activation.get_instructions())
+    privacy = next(m for m in found["Leqy;"].get_methods() if m.get_name() == "G")
+    privacy_code = [i.get_output() for i in privacy.get_instructions()]
+    assert any("EditorInfo;->imeOptions I" in i for i in privacy_code)
+    assert any("16777216" in i for i in privacy_code)
+    print("PASS: native context-selection producer and real incognito predicate verified")
     print("PASS: exact APK hash, all Termux clipboard native bindings, and x() register shape")
 
 

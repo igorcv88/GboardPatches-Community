@@ -38,7 +38,7 @@ public class TermuxClipboardSuggestionRuntimeTest {
     public static class Helper {
         public EditorInfo m;
         public List<?> k = List.of();
-        public boolean o;
+        public boolean o = true; // Normal device context-selection flag; not incognito.
         public Object l;
         int stockClicks;
         public View y(Context context, fih clip, boolean sensitive, int layout, boolean only, ppe surface) {
@@ -50,14 +50,32 @@ public class TermuxClipboardSuggestionRuntimeTest {
     }
     private Ime ime;
     private Helper helper;
-    @Before public void setUp() {
+    private Object savedManualSession;
+    private void manualSession(boolean active, boolean clipboardAllowed) throws Exception {
+        Class<?> type = Class.forName("dev.jason.gboardpatches.extension.manualincognito.GboardManualIncognitoSessionPolicy");
+        java.lang.reflect.Constructor<?> ctor = type.getDeclaredConstructor(
+                boolean.class, boolean.class, boolean.class, boolean.class, long.class);
+        ctor.setAccessible(true);
+        java.lang.reflect.Field field = Class.forName("dev.jason.gboardpatches.extension.manualincognito.GboardManualIncognitoRuntime")
+                .getDeclaredField("activeSession");
+        field.setAccessible(true);
+        field.set(null, ctor.newInstance(active, clipboardAllowed, false, false, 1L));
+    }
+    @Before public void setUp() throws Exception {
+        java.lang.reflect.Field session = Class.forName("dev.jason.gboardpatches.extension.manualincognito.GboardManualIncognitoRuntime")
+                .getDeclaredField("activeSession");
+        session.setAccessible(true); savedManualSession = session.get(null);
+        manualSession(false, false);
         TermuxClipboardSuggestion.suspend();
         qjr.latest = null; qjr.host = null; qjr.requests = 0; qjr.defer = false; qjq.clears = 0; npc.disabled = false; qqw.unlocked = true;
         ime = Robolectric.buildService(Ime.class).create().get();
         ime.info = new EditorInfo(); ime.info.packageName = "com.termux";
         helper = new Helper(); helper.m = ime.info;
     }
-    @After public void tearDown() {
+    @After public void tearDown() throws Exception {
+        java.lang.reflect.Field session = Class.forName("dev.jason.gboardpatches.extension.manualincognito.GboardManualIncognitoRuntime")
+                .getDeclaredField("activeSession");
+        session.setAccessible(true); session.set(null, savedManualSession);
         TermuxClipboardSuggestion.closed(helper); TermuxClipboardSuggestion.suspend();
         if (ime != null) ime.onDestroy();
     }
@@ -80,6 +98,27 @@ public class TermuxClipboardSuggestionRuntimeTest {
         TermuxClipboardSuggestion.handle(helper);
         assertEquals(1, ime.inserted.size());
     }
+    @Test public void ordinaryNativeContextFlagTrueStillPublishesAndPastes() {
+        helper.o = true; copy("ordinary context", false); open();
+        assertNotNull(qjr.latest);
+        qjr.latest.views.get(0).performClick();
+        assertEquals(List.of("ordinary context"), ime.inserted);
+    }
+    @Test public void manualIncognitoSuppressesAutomaticSuggestionEvenWhenClipboardBrowsingIsAllowed() throws Exception {
+        manualSession(true, true);
+        copy("private", false); open();
+        assertNull(qjr.latest); assertTrue(ime.inserted.isEmpty());
+    }
+    @Test public void manualIncognitoChangeInvalidatesAnAlreadyPublishedSuggestion() throws Exception {
+        copy("before privacy change", false); open(); View old = qjr.latest.views.get(0);
+        manualSession(true, false); old.performClick();
+        assertTrue(ime.inserted.isEmpty());
+    }
+    @Test public void privateModuleEditorInfoCopySuppressesSuggestion() {
+        EditorInfo copy = new EditorInfo(); copy.packageName = "com.termux";
+        copy.imeOptions = EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING; helper.m = copy;
+        copy("private module info", false); open(); assertNull(qjr.latest);
+    }
     @Test public void newCopyReplacesOldSuggestionAndInvalidatesItsListener() {
         copy("old", false); open(); View old = qjr.latest.views.get(0);
         copy("new", false); TermuxClipboardSuggestion.handle(helper);
@@ -96,9 +135,7 @@ public class TermuxClipboardSuggestionRuntimeTest {
     }
     @Test public void privateSensitiveEmptyAndLockedSessionsNeverPublish() {
         copy("secret", true); open(); assertNull(qjr.latest);
-        copy("ordinary", false); helper.o = true;
-        TermuxClipboardSuggestion.handle(helper); assertNull(qjr.latest);
-        helper.o = false; ime.info.imeOptions = EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING;
+        copy("ordinary", false); ime.info.imeOptions = EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING;
         TermuxClipboardSuggestion.handle(helper); assertNull(qjr.latest);
         ime.info.imeOptions = 0; qqw.unlocked = false;
         TermuxClipboardSuggestion.handle(helper); assertNull(qjr.latest);
@@ -234,8 +271,9 @@ public class TermuxClipboardSuggestionRuntimeTest {
     }
     @Test public void privacyChangeAfterRenderPreventsInsertion() {
         copy("visible", false); open(); View old = qjr.latest.views.get(0);
-        helper.o = true; old.performClick(); assertTrue(ime.inserted.isEmpty());
-        helper.o = false; ime.connection = null;
+        ime.info.imeOptions = EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING;
+        old.performClick(); assertTrue(ime.inserted.isEmpty());
+        ime.info.imeOptions = 0; ime.connection = null;
         old.performClick(); assertTrue(ime.inserted.isEmpty());
     }
 }
