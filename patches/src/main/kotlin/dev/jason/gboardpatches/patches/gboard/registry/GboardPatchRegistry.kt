@@ -26,6 +26,7 @@ import dev.jason.gboardpatches.patches.gboard.features.calculator.gboardCalculat
 import dev.jason.gboardpatches.patches.gboard.features.about.gboardAboutPageResourcePatch
 import dev.jason.gboardpatches.patches.gboard.features.addsymbols.gboardCustomSymbolsFeatureMarkerPatch
 import dev.jason.gboardpatches.patches.gboard.features.clipboard.gboardClipboardSearch1803Patch
+import dev.jason.gboardpatches.patches.gboard.features.clipboard.gboardTermuxClipboardDiagnosticsPatch
 import dev.jason.gboardpatches.patches.gboard.features.clipboard.gboardClipboardFeatureMarkerPatch
 import dev.jason.gboardpatches.patches.gboard.features.clipboard.gboardClipboardAdapterTrimPatch
 import dev.jason.gboardpatches.patches.gboard.features.clipboard.gboardClipboardColumnCountPatch
@@ -220,6 +221,7 @@ val gboardEditingAccessPointsPatch = gboardPublicResourcePatch(
         gboardEditingAccessPointsFeatureMarkerPatch,
         gboardEditingAccessPointsLifecyclePatch,
         gboardNativeClipboardPastePatch,
+        gboardTermuxClipboardDiagnosticsPatch,
         gboardQuickToolbar1803Patch,
         gboardAccessPointContributions1803Patch,
     )
