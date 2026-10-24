@@ -2,6 +2,7 @@ package dev.jason.gboardpatches.patches.gboard.registry
 
 import dev.jason.gboardpatches.patches.gboard.features.editingaccesspoints.gboardEditingAccessPointsLifecyclePatch
 import dev.jason.gboardpatches.patches.gboard.features.editingaccesspoints.gboardEditingAccessPointsFeatureMarkerPatch
+import dev.jason.gboardpatches.patches.gboard.features.clipboard.gboardTermuxClipboardDiagnosticsPatch
 import dev.jason.gboardpatches.patches.gboard.shared.accesspoint.gboardAccessPointContributions1803Patch
 import dev.jason.gboardpatches.patches.gboard.shared.generated.GboardTargetAdmission
 import dev.jason.gboardpatches.patches.gboard.shared.runtimeabi.RuntimeAbiCatalog
@@ -18,6 +19,7 @@ class GboardEditingAccessPointsPatchContractTest {
         assertTrue(patch.use)
         assertTrue(patch.dependencies.contains(gboardEditingAccessPointsLifecyclePatch))
         assertTrue(patch.dependencies.contains(gboardEditingAccessPointsFeatureMarkerPatch))
+        assertTrue(patch.dependencies.contains(gboardTermuxClipboardDiagnosticsPatch))
         assertTrue(patch.dependencies.contains(gboardAccessPointContributions1803Patch))
         val publicNames = GboardPublishedPatchCatalog.morpheRegistrations.mapNotNull { it.name }
         assertTrue(patch.dependencies.none { it.name in publicNames })
