@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicIntegerArray;
 /** Read-only observation of Lfif. No clipboard access, text access, or terminal operations. */
 public final class TermuxClipboardDiagnostics {
     private static final String TAG = "GboardClipTrace";
-    private static final AtomicIntegerArray LAST = new AtomicIntegerArray(new int[]{-1, -1, -1});
+    private static final AtomicIntegerArray LAST = new AtomicIntegerArray(new int[]{-1, -1, -1, -1, -1});
     private TermuxClipboardDiagnostics() { }
 
     public static void prepared(Object helper) {
@@ -20,6 +20,9 @@ public final class TermuxClipboardDiagnostics {
     }
     public static void refreshed(Object helper) { observe(helper, 1); }
     public static void requested(Object helper) { observe(helper, 2); }
+    /** Gate probes: report only session state, never the method's input or result. */
+    public static void creationEntered(Object helper) { observe(helper, 3); }
+    public static void creationExited(Object helper) { observe(helper, 4); }
 
     private static void observe(Object helper, int stage) {
         // Opt in with log.tag.GboardClipTrace=DEBUG. Normal sessions pay only this check.
