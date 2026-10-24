@@ -32,6 +32,10 @@ class GboardEditingAccessPointsPatchContractTest {
             RuntimeAbiCatalog.abi(RuntimeCallId.EDITING_ACCESS_POINTS_START).descriptor)
         assertEquals("(IIII)V",
             RuntimeAbiCatalog.abi(RuntimeCallId.EDITING_ACCESS_POINTS_SELECTION_UPDATED).descriptor)
+        assertEquals("(Ljava/lang/Object;)V",
+            RuntimeAbiCatalog.abi(RuntimeCallId.TERMUX_CLIPBOARD_CREATION_ENTERED).descriptor)
+        assertEquals("(Ljava/lang/Object;)V",
+            RuntimeAbiCatalog.abi(RuntimeCallId.TERMUX_CLIPBOARD_CREATION_EXITED).descriptor)
         assertEquals("()V",
             RuntimeAbiCatalog.abi(RuntimeCallId.EDITING_ACCESS_POINTS_END).descriptor)
         assertEquals("(Landroid/view/inputmethod/InputConnection;)Landroid/view/inputmethod/InputConnection;",
