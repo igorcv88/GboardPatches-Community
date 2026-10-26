@@ -14,7 +14,10 @@ from androguard.core.dex import DEX
 SHA256 = '3099262121a201dcb2ae7e185bee6b2057287a5aeffae4be0e30f537e505e5b3'
 KEYBOARD = 'Lcom/google/android/apps/inputmethod/libs/clipboard/ClipboardKeyboard;'
 METHODS = {
-    'Leso;': {('C', '()V'): 12, ('b', '(Ljava/util/List;Lojt;Z)V'): 12},
+    'Leso;': {('b', '(Ljava/util/List;Lojt;Z)V'): 12},
+    'Loup;': {('onStartInputView', '(Landroid/view/inputmethod/EditorInfo;Z)V'): 24},
+    'Lcom/google/android/libraries/inputmethod/widgets/SoftKeyboardView;': {
+        ('dispatchTouchEvent', '(Landroid/view/MotionEvent;)Z'): 6},
     'Lmln;': {('m', '(Lnur;)Z'): 14},
     'Lmlh;': {('M', '(Landroid/view/View;)V'): 3},
     'Lfjk;': {('p', '(Lkr;I)V'): 16, ('gT', '(I)I'): 2,
@@ -58,8 +61,6 @@ def main(path):
             ('Lfjf;', 'm', '(Lkr;)V', 1)]:
         refs = [i.get_output() for i in found[owner, name, signature].get_instructions()]
         assert sum('Lkr;->b()I' in ref for ref in refs) == count, owner
-    request = [i.get_output() for i in found['Leso;', 'C', '()V'].get_instructions()]
-    assert any('Lpga;->p(' in ref for ref in request)
     fields = {(f.get_name(), f.get_descriptor()) for f in classes['Lmlh;'].get_fields()}
     assert ('h', 'Lays;') in fields
     for name, signature in [('ao', '(Landroid/util/SparseArray;Z)V')]:
@@ -68,7 +69,7 @@ def main(path):
     for name in ['J', 'K']:
         refs = [i.get_output() for i in found[KEYBOARD, name, '(I)V'].get_instructions()]
         assert sum('RecyclerView;->hU(I)Lkr;' in ref for ref in refs) == 1
-    print('PASS: exact APK, toolbar surface gate, clipboard presentation/action/scroll boundaries and native action factory')
+    print('PASS: exact APK, toolbar candidate observer, native touch/input lifecycle, clipboard presentation/action/scroll boundaries and native action factory')
 
 
 if __name__ == '__main__':

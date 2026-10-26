@@ -57,6 +57,7 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
             if (peer == null || child.getLeft() < peer.getLeft()) peer = child;
         }
         if (peer == null) return;
+        copyNativeTint(peer);
         int width = peer.getWidth(), height = peer.getHeight();
         int right = peer.getLeft(), top = peer.getTop();
         if (search.getLeft() != right - width || search.getTop() != top
@@ -69,6 +70,29 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
             search.setTag(background);
             search.setPadding(0, 0, 0, 0);
         }
+    }
+
+    private boolean copyNativeTint(View peer) {
+        if (peer instanceof android.widget.ImageView image) {
+            android.content.res.ColorStateList tint = image.getImageTintList();
+            if (tint != null) {
+                ((SearchIcon) search.getDrawable()).color(tint.getColorForState(image.getDrawableState(), tint.getDefaultColor()));
+                return true;
+            }
+            ColorFilter filter = image.getColorFilter();
+            if (filter == null && image.getDrawable() != null) filter = image.getDrawable().getColorFilter();
+            if (filter != null) { search.getDrawable().setColorFilter(filter); return true; }
+        }
+        if (peer instanceof android.widget.TextView text && text.getText().length() > 0) {
+            ((SearchIcon) search.getDrawable()).color(text.getCurrentTextColor()); return true;
+        }
+        if (peer instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View child = group.getChildAt(i);
+                if (child.getVisibility() == View.VISIBLE && copyNativeTint(child)) return true;
+            }
+        }
+        return false;
     }
 
     private boolean contains(MotionEvent event) {
@@ -119,6 +143,11 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
         SearchIcon(int color, int size) {
             this.size = size; paint.setColor(color); paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeCap(Paint.Cap.ROUND); paint.setStrokeJoin(Paint.Join.ROUND);
+        }
+        void color(int color) {
+            if (paint.getColor() != color || paint.getColorFilter() != null) {
+                paint.setColor(color); paint.setColorFilter(null); invalidateSelf();
+            }
         }
         public int getIntrinsicWidth() { return size; }
         public int getIntrinsicHeight() { return size; }

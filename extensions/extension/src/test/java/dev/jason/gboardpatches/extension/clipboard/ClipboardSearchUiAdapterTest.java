@@ -100,4 +100,16 @@ public class ClipboardSearchUiAdapterTest {
         ui.close(); assertTrue(actions.getClipChildren());
     }
 
+    @Test public void searchUsesTheNativePeerTintRatherThanASystemBitmapOrDefaultThemeColor() {
+        ClipboardSearchUiAdapter ui = fixture();
+        actions.removeView(peer);
+        android.widget.ImageView nativeIcon = new android.widget.ImageView(actions.getContext());
+        nativeIcon.setImageTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.CYAN));
+        actions.addView(nativeIcon); nativeIcon.layout(100, 0, 148, 48);
+        ui.alignToPeers();
+        android.graphics.Paint paint = org.robolectric.util.ReflectionHelpers.getField(ui.search.getDrawable(), "paint");
+        assertEquals(android.graphics.Color.CYAN, paint.getColor());
+        ui.close();
+    }
+
 }

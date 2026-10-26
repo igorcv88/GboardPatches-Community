@@ -91,7 +91,7 @@ public class QuickToolbar1803FallbackTest {
     public enum Surface { HEADER, WIDGET }
     public static class HeaderOwner { public Surface t = Surface.HEADER; }
 
-    @Test public void historyUpdatesCannotRequestTheCandidateSurfaceOrReopenTools() throws Exception {
+    @Test public void historyUpdatesPreserveSelectedToolsWithoutRedispatch() throws Exception {
         HeaderOwner header = new HeaderOwner();
         QuickToolbar1803Runtime.onCandidateList(header, List.of("one"));
         assertTrue(QuickToolbar1803Runtime.handleEvent(manager, new Event(-40005)));
