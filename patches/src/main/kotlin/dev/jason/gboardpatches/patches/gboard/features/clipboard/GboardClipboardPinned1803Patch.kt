@@ -50,11 +50,24 @@ internal val gboardClipboardPinned1803Patch = bytecodePatch(
             val call = RuntimeCallId.CLIPBOARD_PINNED_HOLDER
             check(positions.size == (if (owner == "Lfhz;") 2 else 1) ||
                 method.implementation!!.instructions.count { it.isMethodReference(call.encodedAbi) } ==
-                (if (owner == "Lfhz;") 2 else 1)) { "Unreviewed clipboard holder positions: $owner" }
+                (if (owner == "Lfhz;" || owner == "Lfjf;") 2 else 1)) { "Unreviewed clipboard holder positions: $owner" }
             positions.forEach { index ->
                 val invoke = method.implementation!!.instructions[index] as FiveRegisterInstruction
                 method.replaceInstruction(index, RuntimeCallEmitter.invoke(call, "v${invoke.registerC}"))
             }
+        }
+        // A swipe callback queued before a native refresh must not index a removed model.
+        val swipe = findMutableMethodOrThrow("Lfjf;", "m", "V", listOf("Lkr;"))
+        val holderCall = RuntimeCallId.CLIPBOARD_PINNED_HOLDER
+        if (!swipe.implementation!!.instructions.first().isMethodReference(holderCall.encodedAbi)) {
+            swipe.addInstructions(0, """
+                ${RuntimeCallEmitter.invoke(holderCall, "p1 .. p1")}
+                move-result v0
+                if-gez v0, :gboard_clipboard_swipe
+                return-void
+                :gboard_clipboard_swipe
+                nop
+            """.trimIndent())
         }
         // Replace native canonical granular notifications, including the single-clip undo paths.
         // Shared synthetic class fdo has other branches: the runtime delegates non-fjk receivers.
@@ -74,7 +87,7 @@ internal val gboardClipboardPinned1803Patch = bytecodePatch(
             }
         }
         // Auto-scroll targets are canonical as well. Map only at the layout boundary.
-        listOf("ao" to listOf("Landroid/util/SparseArray;", "Z"), "J" to listOf("I")).forEach { (name, args) ->
+        listOf("ao" to listOf("Landroid/util/SparseArray;", "Z")).forEach { (name, args) ->
             val method = findMutableMethodOrThrow(CLIPBOARD_KEYBOARD_CLASS, name, "V", args)
             val call = RuntimeCallId.CLIPBOARD_PINNED_VISUAL
             if (method.implementation!!.instructions.none { it.isMethodReference(call.encodedAbi) }) {
@@ -89,6 +102,25 @@ internal val gboardClipboardPinned1803Patch = bytecodePatch(
                     ${RuntimeCallEmitter.invoke(call, "v0, v$positionRegister")}
                     move-result v$positionRegister
                 """.trimIndent())
+            }
+        }
+        listOf("J", "K").forEach { name ->
+            val method = findMutableMethodOrThrow(CLIPBOARD_KEYBOARD_CLASS, name, "V", listOf("I"))
+            val call = RuntimeCallId.CLIPBOARD_PINNED_KEYBOARD_VISUAL
+            if (method.implementation!!.instructions.none { it.isMethodReference(call.encodedAbi) }) {
+                method.addInstructions(0, """
+                    ${RuntimeCallEmitter.invoke(call, "p0 .. p1")}
+                    move-result p1
+                """.trimIndent())
+            }
+        }
+        val restore = findMutableMethodOrThrow("Lfdo;", "onClick", "V", listOf("Landroid/view/View;"))
+        val restoreInstructions = restore.implementation!!.instructions
+        restoreInstructions.toList().forEachIndexed { index, instruction ->
+            if (instruction.isMethodReference("Landroid/support/v7/widget/RecyclerView;->ak(I)V")) {
+                val invoke = instruction as FiveRegisterInstruction
+                restore.replaceInstruction(index, RuntimeCallEmitter.invoke(RuntimeCallId.CLIPBOARD_PINNED_SCROLL,
+                    "v${invoke.registerC}, v${invoke.registerD}"))
             }
         }
         val insertion = findMutableMethodOrThrow("Lfjk;", "I", "V", listOf("Lfih;"))

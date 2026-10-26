@@ -31,6 +31,18 @@ public class ClipboardPinned1803RuntimeTest {
         assertEquals(-1, ClipboardPinned1803Runtime.holderPosition(holder));
         assertEquals(nativeItems, adapter.n);
     }
+    @Test public void aQueuedTapKeepsTheBoundModelWhenNativePositionsChangeBeforeRebind() {
+        fjk adapter = adapter(); kr holder = new kr(); holder.position = 1;
+        ClipboardPinned1803Runtime.bindPosition(adapter, holder, 1);
+        adapter.n.add(1, "new recent");
+        ClipboardPinned1803Runtime.changed(adapter);
+        assertEquals(5, ClipboardPinned1803Runtime.holderPosition(holder));
+        assertEquals("pinned1", adapter.n.get(ClipboardPinned1803Runtime.holderPosition(holder)));
+        adapter.n.remove("pinned1");
+        ClipboardPinned1803Runtime.changed(adapter);
+        assertEquals(-1, ClipboardPinned1803Runtime.holderPosition(holder));
+    }
+
     @Test public void movesAndDeletesInvalidateTheProjectionAndCoalesceNotifications() {
         fjk adapter = adapter();
         assertEquals(4, ClipboardPinned1803Runtime.nativePosition(adapter, 1));

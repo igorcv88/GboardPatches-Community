@@ -6,6 +6,8 @@ internal enum class RuntimeCallId(internal val encodedAbi: String) {
     QUICK_TOOLBAR_CANDIDATES("Ldev/jason/gboardpatches/extension/quicktoolbar/QuickToolbar1803Runtime;->onCandidates(Ljava/lang/Object;)V"),
     QUICK_TOOLBAR_CLEARED("Ldev/jason/gboardpatches/extension/quicktoolbar/QuickToolbar1803Runtime;->onCandidatesCleared(Ljava/lang/Object;)V"),
     QUICK_TOOLBAR_KEEP_TOOLS("Ldev/jason/gboardpatches/extension/quicktoolbar/QuickToolbar1803Runtime;->keepTools(Ljava/lang/Object;)Z"),
+    CLIPBOARD_PINNED_KEYBOARD_VISUAL("Ldev/jason/gboardpatches/extension/clipboard/ClipboardPinned1803Runtime;->keyboardVisualPosition(Ljava/lang/Object;I)I"),
+    CLIPBOARD_PINNED_SCROLL("Ldev/jason/gboardpatches/extension/clipboard/ClipboardPinned1803Runtime;->scroll(Ljava/lang/Object;I)V"),
     CLIPBOARD_PINNED_VISUAL("Ldev/jason/gboardpatches/extension/clipboard/ClipboardPinned1803Runtime;->visualPosition(Ljava/lang/Object;I)I"),
     CLIPBOARD_PINNED_POSITION("Ldev/jason/gboardpatches/extension/clipboard/ClipboardPinned1803Runtime;->nativePosition(Ljava/lang/Object;I)I"),
     CLIPBOARD_PINNED_BIND("Ldev/jason/gboardpatches/extension/clipboard/ClipboardPinned1803Runtime;->bindPosition(Ljava/lang/Object;Ljava/lang/Object;I)I"),

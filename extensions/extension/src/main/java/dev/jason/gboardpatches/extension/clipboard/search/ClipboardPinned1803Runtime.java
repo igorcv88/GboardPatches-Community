@@ -13,7 +13,14 @@ import java.util.WeakHashMap;
 /** Visual positions only. Every native mutation continues to receive a native model position. */
 public final class ClipboardPinned1803Runtime {
     private static final Map<Object, Projection> projections = new WeakHashMap<>();
-    private static final Map<Object, WeakReference<Object>> holders = new WeakHashMap<>();
+    private static final Map<Object, Boolean> enabledAdapters = new WeakHashMap<>();
+    private static final Map<Object, BoundHolder> holders = new WeakHashMap<>();
+    private static final class BoundHolder {
+        final WeakReference<Object> adapter, model;
+        BoundHolder(Object adapter, Object model) {
+            this.adapter = new WeakReference<>(adapter); this.model = new WeakReference<>(model);
+        }
+    }
     private static final Map<Object, Boolean> queued = new WeakHashMap<>();
     private static final Handler UI = new Handler(Looper.getMainLooper());
     private ClipboardPinned1803Runtime() { }
@@ -40,23 +47,43 @@ public final class ClipboardPinned1803Runtime {
         if (Looper.myLooper() != Looper.getMainLooper() || visual < 0) return visual;
         try {
             int[] positions = projection(adapter).positions;
+            enabledAdapters.put(adapter, Boolean.TRUE);
             return visual < positions.length ? positions[visual] : visual;
         } catch (Throwable ignored) { return visual; }
     }
 
     /** Called before native bind and before the existing clipboard decoration hooks. */
     public static int bindPosition(Object adapter, Object holder, int visual) {
-        if (Looper.myLooper() == Looper.getMainLooper()) holders.put(holder, new WeakReference<>(adapter));
-        return nativePosition(adapter, visual);
+        int canonical = nativePosition(adapter, visual);
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            try {
+                List<?> items = (List<?>) ClipboardNative1803.field(adapter, "n");
+                if (canonical >= 0 && canonical < items.size()) holders.put(holder, new BoundHolder(adapter, items.get(canonical)));
+            } catch (Throwable ignored) { }
+        }
+        return canonical;
     }
 
     /** Replaces only reviewed clipboard callers of kr.b(), never the framework holder method. */
     public static int holderPosition(Object holder) {
         try {
             int visual = ((Number) ClipboardNative1803.call(holder, "b")).intValue();
-            WeakReference<Object> ref = holders.get(holder);
-            Object adapter = ref == null ? null : ref.get();
-            return adapter == null ? visual : nativePosition(adapter, visual);
+            if (visual < 0) return visual;
+            BoundHolder bound = holders.get(holder);
+            Object adapter = bound == null ? null : bound.adapter.get();
+            if (adapter == null) return visual;
+            List<?> items = (List<?>) ClipboardNative1803.field(adapter, "n");
+            Object model = bound.model.get();
+            int canonical = items.indexOf(model);
+            if (canonical >= 0) return canonical;
+            // A pin/state update may replace the model object with the same persistent ID.
+            if (model != null) {
+                Object id = ClipboardNative1803.field(model, "d");
+                for (int i = 0; i < items.size(); i++) {
+                    if (id.equals(ClipboardNative1803.field(items.get(i), "d"))) return i;
+                }
+            }
+            return -1;
         } catch (Throwable ignored) { return -1; }
     }
 
@@ -69,12 +96,35 @@ public final class ClipboardPinned1803Runtime {
         return canonical;
     }
 
+    public static int keyboardVisualPosition(Object keyboard, int canonical) {
+        try { return visualPosition(ClipboardNative1803.field(keyboard, "c"), canonical); }
+        catch (Throwable ignored) { return canonical; }
+    }
+
+    public static void scroll(Object recycler, int canonical) {
+        int visual = canonical;
+        for (Object adapter : enabledAdapters.keySet()) {
+            try {
+                if (ClipboardNative1803.field(adapter, "j") == recycler) {
+                    visual = visualPosition(adapter, canonical); break;
+                }
+            } catch (Throwable ignored) { }
+        }
+        try { invoke(recycler, "ak", new Class<?>[]{int.class}, new Object[]{visual}); }
+        catch (Throwable ignored) { }
+    }
+
     public static void changed(Object adapter) { projections.remove(adapter); }
+
+    public static void afterTrim(Object adapter) {
+        if (enabledAdapters.containsKey(adapter)) notifyChanged(adapter, 0);
+        else changed(adapter);
+    }
 
     /** Native granular notifications name canonical positions. Coalesce into one visual rebind.
      * No animations can replay an obsolete canonical move into a different displayed section. */
     private static void notify(Object adapter, String nativeMethod, Class<?>[] types, Object... args) {
-        if (!"fjk".equals(adapter.getClass().getName())) {
+        if (!"fjk".equals(adapter.getClass().getName()) || !enabledAdapters.containsKey(adapter)) {
             try { invoke(adapter, nativeMethod, types, args); } catch (Throwable ignored) { }
             return;
         }
