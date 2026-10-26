@@ -185,6 +185,18 @@ public class QuickToolbar1803FallbackTest {
         assertEquals(2, count("shown"));
     }
 
+    @Test public void detachedCandidateSubtreeCannotDisableTheSelectedToolbarFrameGuard() throws Exception {
+        FrameOwner owner = frameOwner();
+        QuickToolbar1803Runtime.reset();
+        frame.removeView(owner.c);
+        QuickToolbar1803Runtime.onCandidateList(owner, List.of("one"));
+        assertTrue(QuickToolbar1803Runtime.handleEvent(manager, new Event(-40005)));
+        row.setVisibility(android.view.View.GONE);
+        QuickToolbar1803Runtime.afterSuccessfulHistoryAction();
+        assertTrue(frame.getViewTreeObserver().dispatchOnPreDraw());
+        assertEquals(android.view.View.VISIBLE, row.getVisibility());
+    }
+
     @Test public void aRefusingNativeHolderCannotBlockDrawingInALoop() throws Exception {
         frameOwner(); row.setVisibility(android.view.View.GONE);
         manager.getClass().getField("refuseShow").setBoolean(manager, true);

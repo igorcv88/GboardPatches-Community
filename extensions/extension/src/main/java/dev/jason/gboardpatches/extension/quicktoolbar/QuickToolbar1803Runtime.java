@@ -261,9 +261,17 @@ public final class QuickToolbar1803Runtime {
         frameAttempts = 0;
         try {
             Object owner = candidateOwner.get();
-            if (!keepTools(owner) || !(field(owner, "c") instanceof View candidate)) return;
-            View root = candidate.getRootView();
-            if (!root.isAttachedToWindow()) return;
+            if (!keepTools(owner)) return;
+            View root = null;
+            // Opening tools may detach the candidate subtree. Bind to the real toolbar first.
+            Object target = selectedManager.get();
+            Object holder = field(target, "s");
+            Object actualRow = field(holder, "j");
+            if (actualRow instanceof View row && row.isAttachedToWindow()) root = row.getRootView();
+            if (root == null && field(owner, "c") instanceof View candidate && candidate.isAttachedToWindow()) {
+                root = candidate.getRootView();
+            }
+            if (root == null || !root.isAttachedToWindow()) return;
             if (frameRoot.get() == root) return;
             releaseFrameGuard();
             frameRoot = new WeakReference<>(root);
