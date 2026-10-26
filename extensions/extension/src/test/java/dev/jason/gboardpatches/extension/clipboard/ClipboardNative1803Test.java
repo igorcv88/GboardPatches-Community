@@ -35,6 +35,17 @@ public class ClipboardNative1803Test {
         assertEquals(-10001, code.invoke(null, events.get(0)));
     }
 
+    @Test public void returnUsesTheNativeClipboardDescriptorPrimaryAction() throws Exception {
+        Object controller = stubs().getMethod("controller").invoke(null);
+        Object action = ClipboardNative1803.clipboardAction(controller);
+        assertEquals(Integer.valueOf(-10124), ClipboardNative1803.actionCode(action));
+        Object keyboard = Class.forName("ClipboardTestNative$Keyboard").getConstructor().newInstance();
+        assertTrue(ClipboardNative1803.dispatch(keyboard, action));
+        List<?> events = (List<?>) stubs().getMethod("events", Object.class).invoke(null, keyboard);
+        assertEquals(1, events.size());
+        assertNull(ClipboardNative1803.clipboardAction(new Object()));
+    }
+
     @Test public void missingKeyOrManagerNeverDispatches() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         assertNull(ClipboardNative1803.backKeyAction(new FrameLayout(activity)));

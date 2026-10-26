@@ -15,6 +15,21 @@ internal val gboardQuickToolbar1803Patch = bytecodePatch(
     compatibleWith(COMPATIBILITY_GBOARD)
     dependsOn(gboardEditingAccessPointsLifecyclePatch)
     execute {
+        // C() requests pga.p(HEADER, candidates). Leave list binding/data intact while tools
+        // own the header, instead of letting candidates preempt it and posting an M() restore.
+        val request = findMutableMethodOrThrow("Leso;", "C", "V", emptyList())
+        val keep = RuntimeCallId.QUICK_TOOLBAR_KEEP_TOOLS
+        check(request.implementation!!.registerCount == 12) { "Unreviewed candidate request registers" }
+        val keepCalls = request.implementation!!.instructions.count { it.isMethodReference(keep.encodedAbi) }
+        check(keepCalls <= 1) { "Duplicate candidate surface gate" }
+        if (keepCalls == 0) request.addInstructions(0, """
+            ${RuntimeCallEmitter.invoke(keep, "p0 .. p0")}
+            move-result v0
+            if-eqz v0, :gboard_candidate_surface
+            return-void
+            :gboard_candidate_surface
+            nop
+        """.trimIndent())
         val candidates = findMutableMethodOrThrow("Leso;", "b", "V", listOf("Ljava/util/List;", "Lojt;", "Z"))
         val listCall = RuntimeCallId.QUICK_TOOLBAR_CANDIDATE_LIST
         val listCalls = candidates.implementation!!.instructions.count { it.isMethodReference(listCall.encodedAbi) }

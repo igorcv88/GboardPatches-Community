@@ -54,6 +54,26 @@ final class ClipboardNative1803 {
         } catch (Throwable ignored) { return false; }
     }
 
+    /** Resolve the stock clipboard action from mlh.h, the native descriptor catalog.
+     * mic.e(pmy.a) is exactly the primary-click ActionDef used by mln.K. */
+    static Object clipboardAction(Object controller) {
+        try {
+            Object catalog = field(controller, "h");
+            Object descriptor;
+            if (catalog instanceof java.util.Map<?, ?> entries) descriptor = entries.get("clipboard");
+            else {
+                Method get = catalog.getClass().getMethod("get", Object.class); get.setAccessible(true);
+                descriptor = get.invoke(catalog, "clipboard");
+            }
+            if (descriptor == null || !"clipboard".equals(field(descriptor, "b"))) return null;
+            Class<?> click = Class.forName("pmy", false, controller.getClass().getClassLoader());
+            java.lang.reflect.Field primary = click.getDeclaredField("a"); primary.setAccessible(true);
+            Method action = descriptor.getClass().getDeclaredMethod("e", click); action.setAccessible(true);
+            Object definition = action.invoke(descriptor, primary.get(null));
+            return definition == null ? null : call(definition, "b");
+        } catch (Throwable ignored) { return null; }
+    }
+
     /**
      * Persistent delete of exactly these ids: Lfjo.h(Context, List<Long>) builds one
      * ContentProviderOperation.newDelete per item URI (Lfjo.d(ctx, 1, id)) and applies the batch.

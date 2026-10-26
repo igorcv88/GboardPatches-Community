@@ -14,5 +14,12 @@ public final class ClipboardTestNative {
     }
     public static int code(Object event) { return ((nur) event).action.c; }
     public static List<nur> events(Object keyboard) { return ((Keyboard) keyboard).x.events; }
+    public static final class Controller { public final java.util.Map<String, Object> h = java.util.Map.of("clipboard", new Descriptor()); }
+    public static final class Descriptor {
+        public final String b = "clipboard";
+        public Definition e(pmy click) { return new Definition(); }
+    }
+    public static final class Definition { public pnu b() { return new pnu(-10124); } }
+    public static Object controller() { return new Controller(); }
     private ClipboardTestNative() {}
 }

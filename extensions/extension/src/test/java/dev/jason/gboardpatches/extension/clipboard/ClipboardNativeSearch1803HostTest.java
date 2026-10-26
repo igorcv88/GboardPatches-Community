@@ -109,9 +109,9 @@ public class ClipboardNativeSearch1803HostTest {
         assertFalse(ClipboardNativeSearch1803.isOpen());
     }
 
-    @Test public void searchCannotOpenWhileBindingsAreUnreviewed() {
+    @Test public void searchIsEnabledButMissingNativeActionsFailClosed() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        assertFalse(ClipboardNativeSearch1803.available());
+        assertTrue(ClipboardNativeSearch1803.available());
         assertFalse(ClipboardNativeSearch1803.open(null, new View(activity), List.of()));
         assertFalse(ClipboardNativeSearch1803.isOpen());
     }

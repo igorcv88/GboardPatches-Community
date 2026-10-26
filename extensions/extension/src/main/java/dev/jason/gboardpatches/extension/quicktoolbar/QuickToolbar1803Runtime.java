@@ -63,7 +63,6 @@ public final class QuickToolbar1803Runtime {
         if (!main() || applying) return;
         candidateOwner = new WeakReference<>(owner);
         candidateListNonempty = candidates instanceof java.util.List<?> list && !list.isEmpty();
-        scheduleRestore();
     }
 
     public static void onControllerView(Object value) {
@@ -97,7 +96,6 @@ public final class QuickToolbar1803Runtime {
 
     public static void onCandidates(Object value) {
         if (!main() || applying || value != candidateOwner.get()) return;
-        scheduleRestore();
         try {
             Object nativeCandidate = field(value, "c");
             if (!(nativeCandidate instanceof View candidate)) { diagnose("candidate view missing"); return; }
@@ -139,7 +137,6 @@ public final class QuickToolbar1803Runtime {
             binding.update(enabled,
                     active && (candidate.isShown() || favoritesSelected),
                     hasCandidates || favoritesSelected, favoritesSelected);
-            scheduleRestore();
         } catch (Throwable failure) {
             diagnose("candidate binding failed: " + failure.getClass().getSimpleName());
             clearBinding();
@@ -165,6 +162,7 @@ public final class QuickToolbar1803Runtime {
             diagnose("event action unreadable: " + failure.getClass().getSimpleName());
             return false;
         }
+        onTypingEvent(code);
         if (code != -40005 && code != -40006) return false;
         if (!featureEnabled()) { deselect(); return false; }
         if (binding != null && nativeManager == manager.get()) {
@@ -219,10 +217,32 @@ public final class QuickToolbar1803Runtime {
         return true;
     }
 
-    /** Coalesced after native candidate callbacks, independent of display refresh rate. */
-    public static void afterSuccessfulHistoryAction() {
-        if (main()) scheduleRestore();
+    /** Leso.C only requests the native candidate surface; b() still updates candidate data.
+     * Block the surface request before it can preempt tools, rather than restoring it later. */
+    public static boolean keepTools(Object owner) {
+        if (!main() || applying || !favoritesSelected || !featureEnabled()
+                || owner != candidateOwner.get()) return false;
+        try {
+            Object surface = field(owner, "t");
+            return surface instanceof Enum<?> value && "HEADER".equals(value.name());
+        } catch (Throwable ignored) { return false; }
     }
+
+    /** Called only by direct native typing events, never by history/paste connection calls. */
+    public static void onTypingEvent(int code) {
+        if (!main() || applying || !favoritesSelected) return;
+        // Unicode scalar key codes, native text input (-10009), backspace and Enter.
+        if (code >= 0 && code <= Character.MAX_CODE_POINT || code == -10009
+                || code == -5 || code == -4) {
+            hideFavorites();
+            Object owner = candidateOwner.get();
+            if (owner != null) onCandidates(owner);
+        }
+    }
+
+    /** Kept as an ABI for the editing module; history actions no longer re-show a surface. */
+    public static void afterSuccessfulHistoryAction() { }
+
 
     private static void scheduleRestore() {
         if (!favoritesSelected || pendingRestore != null || applying) return;

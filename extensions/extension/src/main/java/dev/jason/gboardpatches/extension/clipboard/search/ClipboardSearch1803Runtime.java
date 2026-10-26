@@ -38,7 +38,7 @@ public final class ClipboardSearch1803Runtime {
     }
 
     /** Lfjk.M(Z): native list refresh. Snapshots are taken on demand, nothing to update. */
-    public static void changed(Object adapter) { }
+    public static void changed(Object adapter) { ClipboardPinned1803Runtime.changed(adapter); }
 
     private static boolean traced;
 

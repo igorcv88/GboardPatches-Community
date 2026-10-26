@@ -130,7 +130,7 @@ public class QuickToolbar1803RuntimeBindingTest {
                 QuickToolbar1803Runtime.afterSuccessfulHistoryAction();
                 f.idle();
             }
-            assertEquals(6, f.count("shown"));
+            assertEquals(1, f.count("shown"));
             assertEquals(0, f.count("hidden"));
             f.tap();
             assertEquals(1, f.count("hidden"));

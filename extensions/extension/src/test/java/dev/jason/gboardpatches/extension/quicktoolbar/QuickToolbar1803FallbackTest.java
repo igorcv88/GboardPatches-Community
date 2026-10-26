@@ -88,6 +88,50 @@ public class QuickToolbar1803FallbackTest {
         assertEquals(1, count("shown"));
     }
 
+    public enum Surface { HEADER, WIDGET }
+    public static class HeaderOwner { public Surface t = Surface.HEADER; }
+
+    @Test public void historyUpdatesCannotRequestTheCandidateSurfaceOrReopenTools() throws Exception {
+        HeaderOwner header = new HeaderOwner();
+        QuickToolbar1803Runtime.onCandidateList(header, List.of("one"));
+        assertTrue(QuickToolbar1803Runtime.handleEvent(manager, new Event(-40005)));
+        for (int i = 0; i < 5; i++) {
+            QuickToolbar1803Runtime.onCandidateList(header, List.of("redraw"));
+            assertTrue(QuickToolbar1803Runtime.keepTools(header));
+            QuickToolbar1803Runtime.afterSuccessfulHistoryAction();
+        }
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(1, count("shown"));
+        assertEquals(0, count("hidden"));
+        assertFalse(QuickToolbar1803Runtime.keepTools(new HeaderOwner()));
+        header.t = Surface.WIDGET;
+        assertFalse(QuickToolbar1803Runtime.keepTools(header));
+    }
+
+    @Test public void typingReleasesToolsBeforeCandidateRenderingAndDoesNotConsumeTheKey() throws Exception {
+        HeaderOwner header = new HeaderOwner();
+        QuickToolbar1803Runtime.onCandidateList(header, List.of("one"));
+        assertTrue(QuickToolbar1803Runtime.handleEvent(manager, new Event(-40005)));
+        assertFalse(QuickToolbar1803Runtime.handleEvent(manager, new Event('á')));
+        assertFalse(QuickToolbar1803Runtime.keepTools(header));
+        QuickToolbar1803Runtime.onCandidateList(header, List.of("typed"));
+        QuickToolbar1803Runtime.afterSuccessfulHistoryAction();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(1, count("hidden"));
+        assertEquals(1, count("shown"));
+        assertTrue(QuickToolbar1803Runtime.handleEvent(manager, new Event(-40005)));
+        assertEquals(2, count("shown"));
+    }
+
+    @Test public void toolAndClipboardActionsDoNotReleaseTheSelectedToolbar() throws Exception {
+        HeaderOwner header = new HeaderOwner();
+        QuickToolbar1803Runtime.onCandidateList(header, List.of("one"));
+        assertTrue(QuickToolbar1803Runtime.handleEvent(manager, new Event(-40005)));
+        assertFalse(QuickToolbar1803Runtime.handleEvent(manager, new Event(-40003)));
+        assertTrue(QuickToolbar1803Runtime.keepTools(header));
+        assertEquals(0, count("hidden"));
+    }
+
     @Test public void normalKeyboardKeepsStockFullPanel() throws Exception {
         assertFalse(QuickToolbar1803Runtime.handleEvent(manager, new Event(-40005)));
         QuickToolbar1803Runtime.onCandidateList(owner, List.of());
