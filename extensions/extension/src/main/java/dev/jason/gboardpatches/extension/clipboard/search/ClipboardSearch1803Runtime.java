@@ -17,6 +17,12 @@ public final class ClipboardSearch1803Runtime {
     private static Session active;
     private ClipboardSearch1803Runtime() {}
 
+    public static boolean onTouch(Object keyboardView, Object motionEvent) {
+        Session session = active;
+        return main() && session != null && keyboardView instanceof View view
+                && motionEvent instanceof android.view.MotionEvent event && session.ui.dispatchTouch(view, event);
+    }
+
     public static void opened(Object keyboard) {
         if (!main()) return;
         closeActive();
@@ -29,6 +35,7 @@ public final class ClipboardSearch1803Runtime {
             View actions = recycler.getRootView().findViewById(0x7f0b0527);
             if (!(actions instanceof ViewGroup actionGroup)) return;
             active = new Session(keyboard, adapter, recycler, actionGroup);
+            dev.jason.gboardpatches.extension.quicktoolbar.QuickToolbar1803Runtime.clipboardPanel(true);
         } catch (Throwable failure) { report("attach", failure); closeActive(); }
     }
 
@@ -61,7 +68,10 @@ public final class ClipboardSearch1803Runtime {
 
     private static void closeActive() {
         Session session = active; active = null;
-        if (session != null) session.close();
+        if (session != null) {
+            session.close();
+            dev.jason.gboardpatches.extension.quicktoolbar.QuickToolbar1803Runtime.clipboardPanel(false);
+        }
     }
 
     /** Text clips in native order; sensitive clips, headers and non-text items are excluded. */
@@ -115,7 +125,11 @@ public final class ClipboardSearch1803Runtime {
             ui = new ClipboardSearchUiAdapter(actions, this::search);
         }
         void search() {
-            try { ClipboardNativeSearch1803.open(keyboard, recycler, snapshot(adapter)); }
+            try {
+                if (!ClipboardNativeSearch1803.open(keyboard, recycler, snapshot(adapter))) {
+                    android.widget.Toast.makeText(recycler.getContext(), "Não foi possível abrir a busca do clipboard.", android.widget.Toast.LENGTH_SHORT).show();
+                }
+            }
             catch (Throwable failure) { report("snapshot", failure); }
         }
         public void close() { ui.close(); }

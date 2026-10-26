@@ -31,4 +31,73 @@ public class ClipboardSearchUiAdapterTest {
         ui.search.performClick();
         assertEquals(1, searches[0]);
     }
+    static final class NativeRoot extends android.widget.FrameLayout {
+        ClipboardSearchUiAdapter ui;
+        boolean bridge;
+        int stockEvents;
+        NativeRoot(Activity activity) { super(activity); }
+        @Override public boolean dispatchTouchEvent(android.view.MotionEvent event) {
+            if (bridge && ui != null && ui.dispatchTouch(this, event)) return true;
+            stockEvents++; return true; // Native key graph consumes the event; child onClick never runs.
+        }
+    }
+    private NativeRoot root;
+    private LinearLayout actions;
+    private View peer;
+    private int picks;
+    private ClipboardSearchUiAdapter fixture() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        root = new NativeRoot(activity);
+        actions = new LinearLayout(activity); root.addView(actions);
+        peer = new View(activity); actions.addView(peer, new LinearLayout.LayoutParams(48, 48));
+        ClipboardSearchUiAdapter ui = new ClipboardSearchUiAdapter(actions, () -> picks++);
+        root.ui = ui;
+        activity.setContentView(root);
+        View decor = activity.getWindow().getDecorView();
+        decor.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(300, View.MeasureSpec.EXACTLY));
+        decor.layout(0, 0, 400, 300);
+        root.layout(0, 0, 400, 200); actions.layout(100, 0, 340, 60);
+        // Simulate native scaled-key positioning leaving a gap before the first stock key.
+        peer.layout(100, 0, 148, 48);
+        ui.search.layout(0, 0, 40, 60); ui.alignToPeers();
+        return ui;
+    }
+    private void event(int action, boolean inside) {
+        int[] location = new int[2]; root.ui.search.getLocationOnScreen(location);
+        float x = inside ? location[0] + root.ui.search.getWidth() / 2f : location[0] - 20;
+        float y = location[1] + root.ui.search.getHeight() / 2f;
+        android.view.MotionEvent event = android.view.MotionEvent.obtain(0, 1, action, x, y, 0);
+        root.dispatchTouchEvent(event); event.recycle();
+    }
+    @Test public void nativeTouchGraphCanActivateSearchExactlyOnceWhileOtherKeysRemainStock() {
+        ClipboardSearchUiAdapter ui = fixture();
+        event(android.view.MotionEvent.ACTION_DOWN, true); event(android.view.MotionEvent.ACTION_UP, true);
+        assertEquals(0, picks); // An ordinary listener is insufficient on this parent.
+        root.bridge = true;
+        event(android.view.MotionEvent.ACTION_DOWN, true); event(android.view.MotionEvent.ACTION_UP, true);
+        assertEquals(1, picks); assertEquals(2, root.stockEvents);
+        event(android.view.MotionEvent.ACTION_DOWN, false); event(android.view.MotionEvent.ACTION_UP, false);
+        assertEquals(1, picks); assertEquals(4, root.stockEvents);
+        ui.close();
+    }
+    @Test public void cancelledDraggedAndDetachedGesturesNeverOpenSearch() {
+        ClipboardSearchUiAdapter ui = fixture(); root.bridge = true;
+        event(android.view.MotionEvent.ACTION_DOWN, true); event(android.view.MotionEvent.ACTION_CANCEL, true);
+        event(android.view.MotionEvent.ACTION_DOWN, true); event(android.view.MotionEvent.ACTION_MOVE, false);
+        event(android.view.MotionEvent.ACTION_UP, true);
+        assertEquals(0, picks);
+        ui.close(); event(android.view.MotionEvent.ACTION_UP, true);
+        assertEquals(0, picks); assertFalse(ui.search.isPressed());
+    }
+    @Test public void vectorActionUsesPeerBoundsWithoutAGapAndRestoresParentClipping() {
+        ClipboardSearchUiAdapter ui = fixture();
+        assertEquals(peer.getLeft(), ui.search.getRight());
+        assertEquals(peer.getWidth(), ui.search.getWidth());
+        assertEquals(peer.getHeight(), ui.search.getHeight());
+        assertTrue(ui.search.getDrawable() instanceof ClipboardSearchUiAdapter.SearchIcon);
+        assertFalse(actions.getClipChildren());
+        ui.close(); assertTrue(actions.getClipChildren());
+    }
+
 }

@@ -71,3 +71,31 @@ and single/bulk delete with distinct identifiable clips, search accent/case/long
 text/Unicode, query isolation (including Termux), close/Back/pick, focus changes,
 portrait/landscape/floating and Frosted Glass. Recheck the already accepted Termux
 clipboard suggestion. The previous r3 success proves that feature, not these changes.
+
+## Device feedback on review.8 and revision 9
+
+The user confirmed that typing after tools now returns to suggestions. Two failures
+remain on device: Undo hides the toolbar leaving an empty header, and the search
+icon does not activate search, is separated from the right action cluster and uses
+an inappropriate bitmap icon.
+
+Revision 9 removes the incomplete eso.C suppression. A transient pre-draw observer
+maintains the selected native row after native arbitration, before a blank/candidate
+frame is painted. It reuses mln.M only when the actual row is not visible; it cancels
+at most two draws if the native holder refuses. Typing/toggle/session teardown remove
+the observer. Clipboard and search retain their own header. No timer or frame polling
+runs while suggestions are selected.
+
+The search action gets a vector lens, theme foreground and the measured bounds of
+the adjacent visible native key. Touches starting in its visible bounds are handled
+at SoftKeyboardView.dispatchTouchEvent before the native key graph can swallow an
+ordinary ImageButton click. Outside gestures remain stock; cancel/drag/multitouch
+cannot activate search. Accessibility click still invokes the same single listener.
+The IME is captured from onStartInputView rather than requiring the clipboard's
+themed/application Context to be an InputMethodService. Missing prerequisites now
+produce a visible failure message and fixed state names, never clip/query text.
+
+New regressions simulate a native parent swallowing child clicks, vector/alignment,
+cancelled gestures, actual row hiding after repeated history actions, drawing refusal,
+clipboard ownership, and an application Context separate from the bound service.
+CI, transformation of the original APK and physical validation are separate checks.

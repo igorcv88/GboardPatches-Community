@@ -42,6 +42,12 @@ public final class ClipboardNativeSearch1803 {
         if (main()) controller = new java.lang.ref.WeakReference<>(value);
     }
 
+    private static java.lang.ref.WeakReference<InputMethodService> inputService = new java.lang.ref.WeakReference<>(null);
+    public static void inputStarted(Object value) {
+        if (!main()) return;
+        end(); inputService = new java.lang.ref.WeakReference<>(value instanceof InputMethodService ime ? ime : null);
+    }
+
     private static ClipboardNativeSearchSession active;
     private static ClipboardSearchSurface surface;
     private static boolean opening, endRequested;
@@ -56,7 +62,7 @@ public final class ClipboardNativeSearch1803 {
     public static boolean open(Object keyboard, View anchor, List<ClipboardSearchSurface.Clip> clips) {
         if (!main() || !available() || active != null) return false;
         InputMethodService ime = service(anchor.getContext());
-        if (ime == null) return false;
+        if (ime == null) { reportState("missing-service"); return false; }
         try {
             Object field = Class.forName(FIELD_CLASS, true, ime.getClass().getClassLoader())
                     .getConstructor(Context.class).newInstance(anchor.getContext());
@@ -69,7 +75,9 @@ public final class ClipboardNativeSearch1803 {
             }
             Object returnAction = ClipboardNative1803.clipboardAction(controller.get());
             Object alphabetAction = ClipboardNative1803.backKeyAction(anchor.getRootView());
-            if (returnAction == null || alphabetAction == null) return false;
+            if (returnAction == null || alphabetAction == null) {
+                reportState(returnAction == null ? "missing-return-action" : "missing-alphabet-action"); return false;
+            }
             Host host = new Host(ime, (View) field, keyboard, anchor.getRootView());
             host.returnAction = returnAction;
             host.alphabetAction = alphabetAction;
@@ -186,7 +194,7 @@ public final class ClipboardNativeSearch1803 {
         worker.start();
     }
 
-    static boolean isOpen() { return active != null && active.state() == ClipboardNativeSearchSession.State.OPEN; }
+    public static boolean isOpen() { return active != null && active.state() == ClipboardNativeSearchSession.State.OPEN; }
 
     private static void finish() {
         active = null;
@@ -311,10 +319,14 @@ public final class ClipboardNativeSearch1803 {
         for (Context c = context; c != null; c = c instanceof ContextWrapper w ? w.getBaseContext() : null) {
             if (c instanceof InputMethodService ime) return ime;
         }
-        return null;
+        return inputService.get();
     }
 
     private static boolean main() { return Looper.myLooper() == Looper.getMainLooper(); }
+
+    private static void reportState(String state) {
+        android.util.Log.w("GboardPatches", "Clipboard native search r9: " + state);
+    }
 
     private static void report(String operation, Throwable failure) {
         android.util.Log.w("GboardPatches", "Clipboard native search: " + operation

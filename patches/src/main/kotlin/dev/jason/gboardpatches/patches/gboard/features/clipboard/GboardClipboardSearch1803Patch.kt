@@ -18,6 +18,24 @@ internal val gboardClipboardSearch1803Patch = bytecodePatch(
     compatibleWith(COMPATIBILITY_GBOARD)
     dependsOn(gboardClipboardPinned1803Patch, gboardTermuxClipboardDiagnosticsPatch)
     execute {
+        findMutableMethodOrThrow(INPUT_METHOD_SERVICE_OWNER, "onStartInputView", "V",
+            listOf("Landroid/view/inputmethod/EditorInfo;", "Z"))
+            .applyVoidExitLifecycleDelegate(RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_INPUT_STARTED, "p0 .. p0")
+        // Ordinary child click listeners are bypassed by the native key touch graph.
+        val touch = findMutableMethodOrThrow("Lcom/google/android/libraries/inputmethod/widgets/SoftKeyboardView;",
+            "dispatchTouchEvent", "Z", listOf("Landroid/view/MotionEvent;"))
+        val touchCall = RuntimeCallId.CLIPBOARD_SEARCH_TOUCH
+        check(touch.implementation!!.registerCount == 6) { "Unreviewed keyboard touch registers" }
+        if (touch.implementation!!.instructions.none { it.isMethodReference(touchCall.encodedAbi) }) {
+            touch.addInstructions(0, """
+                ${RuntimeCallEmitter.invoke(touchCall, "p0 .. p1")}
+                move-result v0
+                if-eqz v0, :gboard_clipboard_stock_touch
+                return v0
+                :gboard_clipboard_stock_touch
+                nop
+            """.trimIndent())
+        }
         findMutableMethodOrThrow("Lmlh;", "M", "V", listOf("Landroid/view/View;"))
             .applyVoidExitLifecycleDelegate(RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_CONTROLLER, "p0 .. p0")
         findMutableMethodOrThrow(CLIPBOARD_KEYBOARD_CLASS, "e", "V",

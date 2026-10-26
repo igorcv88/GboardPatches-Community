@@ -48,6 +48,11 @@ public final class QuickToolbar1803Runtime {
     private static long selectionRevision;
     private static final Handler UI = new Handler(Looper.getMainLooper());
     private static Runnable pendingRestore;
+    private static WeakReference<View> frameRoot = new WeakReference<>(null);
+    private static int frameAttempts;
+    private static boolean clipboardPanel;
+    private static final android.view.ViewTreeObserver.OnPreDrawListener BEFORE_DRAW = QuickToolbar1803Runtime::beforeDraw;
+
     private static final java.util.Set<String> REPORTED = ConcurrentHashMap.newKeySet();
     private QuickToolbar1803Runtime() {}
 
@@ -63,6 +68,7 @@ public final class QuickToolbar1803Runtime {
         if (!main() || applying) return;
         candidateOwner = new WeakReference<>(owner);
         candidateListNonempty = candidates instanceof java.util.List<?> list && !list.isEmpty();
+        armFrameGuard();
     }
 
     public static void onControllerView(Object value) {
@@ -147,7 +153,7 @@ public final class QuickToolbar1803Runtime {
         if (!main() || applying || owner != candidateOwner.get()) return;
         // Native favorites suppress the candidate view without ending the text session.
         // Actual empty candidate lists arrive independently through b(List, ...).
-        if (favoritesSelected) return;
+        if (favoritesSelected) { armFrameGuard(); return; }
         clearBinding();
     }
 
@@ -213,12 +219,12 @@ public final class QuickToolbar1803Runtime {
         favoritesSelected = true;
         selectedManager = new WeakReference<>(nativeManager);
         selectionRevision++;
+        armFrameGuard();
         diagnose("favorites shown by event fallback (no button binding)");
         return true;
     }
 
-    /** Leso.C only requests the native candidate surface; b() still updates candidate data.
-     * Block the surface request before it can preempt tools, rather than restoring it later. */
+    /** Selected tools apply only to the current native HEADER candidate owner. */
     public static boolean keepTools(Object owner) {
         if (!main() || applying || !favoritesSelected || !featureEnabled()
                 || owner != candidateOwner.get()) return false;
@@ -240,8 +246,72 @@ public final class QuickToolbar1803Runtime {
         }
     }
 
-    /** Kept as an ABI for the editing module; history actions no longer re-show a surface. */
-    public static void afterSuccessfulHistoryAction() { }
+    /** Selection/candidate callbacks can hide either native surface during history replay.
+     * Reconcile before the next frame, after all native arbitration has finished. */
+    public static void afterSuccessfulHistoryAction() { if (main()) armFrameGuard(); }
+
+    public static void clipboardPanel(boolean showing) {
+        if (!main()) return;
+        clipboardPanel = showing;
+        if (!showing) armFrameGuard();
+    }
+
+    private static void armFrameGuard() {
+        if (!main() || applying || !favoritesSelected) return;
+        frameAttempts = 0;
+        try {
+            Object owner = candidateOwner.get();
+            if (!keepTools(owner) || !(field(owner, "c") instanceof View candidate)) return;
+            View root = candidate.getRootView();
+            if (!root.isAttachedToWindow()) return;
+            if (frameRoot.get() == root) return;
+            releaseFrameGuard();
+            frameRoot = new WeakReference<>(root);
+            root.getViewTreeObserver().addOnPreDrawListener(BEFORE_DRAW);
+        } catch (Throwable ignored) { }
+    }
+
+    private static void releaseFrameGuard() {
+        View root = frameRoot.get(); frameRoot.clear();
+        if (root != null && root.getViewTreeObserver().isAlive()) {
+            root.getViewTreeObserver().removeOnPreDrawListener(BEFORE_DRAW);
+        }
+    }
+
+    private static boolean rowVisible(View row) {
+        if (!row.isShown() || !row.isAttachedToWindow() || row.getWidth() <= 0 || row.getHeight() <= 0) return false;
+        for (View view = row; view != null; ) {
+            if (view.getAlpha() <= 0) return false;
+            android.view.ViewParent parent = view.getParent();
+            view = parent instanceof View value ? value : null;
+        }
+        return row.getGlobalVisibleRect(new android.graphics.Rect());
+    }
+
+    private static boolean beforeDraw() {
+        View root = frameRoot.get();
+        if (!favoritesSelected || !featureEnabled() || root == null || !root.isAttachedToWindow()) {
+            releaseFrameGuard(); return true;
+        }
+        // Clipboard/search owns another native header; do not replace that panel with tools.
+        if (clipboardPanel || dev.jason.gboardpatches.extension.clipboard.ClipboardNativeSearch1803.isOpen() || applying) return true;
+        try {
+            Object target = selectedManager.get();
+            Object holder = field(target, "s");
+            Object nativeRow = field(holder, "j");
+            if (nativeRow instanceof View row) {
+                if (row.isAttachedToWindow() && row.getRootView() != root) return true;
+                if (rowVisible(row)) { frameAttempts = 0; return true; }
+            }
+            if (frameAttempts >= 2) return true; // Never stall drawing if the native holder refuses.
+            frameAttempts++;
+            if (invokeShowFavorites(target)) {
+                root.postInvalidateOnAnimation();
+                return false; // Layout the restored row before drawing, never paint the blank frame.
+            }
+        } catch (Throwable ignored) { }
+        return true;
+    }
 
 
     private static void scheduleRestore() {
@@ -258,6 +328,7 @@ public final class QuickToolbar1803Runtime {
 
     private static void deselect() {
         favoritesSelected = false;
+        releaseFrameGuard();
         selectedManager.clear();
         selectionRevision++;
         if (pendingRestore != null) UI.removeCallbacks(pendingRestore);
@@ -280,6 +351,7 @@ public final class QuickToolbar1803Runtime {
         favoritesSelected = true;
         selectedManager = new WeakReference<>(target);
         selectionRevision++;
+        armFrameGuard();
         return true;
     }
 
@@ -364,6 +436,7 @@ public final class QuickToolbar1803Runtime {
         deselect(); hideFavorites(target);
         clearBinding(); controller.clear(); manager.clear(); bar.clear();
         candidateOwner.clear(); candidateListNonempty = false;
+        clipboardPanel = false;
     }
     public static void clear() {
         reset();
