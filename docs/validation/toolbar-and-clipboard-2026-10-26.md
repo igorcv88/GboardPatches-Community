@@ -134,3 +134,32 @@ touch center outside the viewport after reflow; that fixture was corrected. The
 production hit-test stays local to the descendant hierarchy. The circular fallback
 uses the native glyph's effective tint (including PorterDuff filters), rather than
 the application theme, which can differ from a custom dark keyboard theme.
+
+
+## Device trace on review.15 — return action and native button skin
+
+40 consecutive touches reached touch-captured -> open-requested -> missing-return-action;
+no FATAL EXCEPTION. Session.search's Toast reports open() returning false. The guard
+runs before start(), so neither the candidates surface nor alphabet/routing transition
+was attempted.
+
+Exact APK mlh.M(View) has 3 registers: p0 aliases v1. Near its final return it invokes
+mlh.G():mln and move-result-object v1, overwriting p0. The exit delegate consequently
+captured mln; mln.h is boolean, whereas mlh.h is ays (SimpleArrayMap). Reflection swallowed
+the incompatible get lookup and returned null. Capture now runs at method entry,
+when p0 still refers to mlh. Runtime accepts the catalog's get(Object) ABI, including
+ays which does not implement Map, and rejects an incompatible receiver. The native
+mic.e(pmy.a):ActionDef -> b():pnu -> nur.d -> Keyboard.x.M references exist in this APK;
+there is no invented return keycode and the return-action guard stays in place.
+
+Search uses the existing composite surface over the native alphabet keyboard. Back
+restores Z(null,false), checks editor routing, hides the search, then dispatches the
+captured clipboard action. Query typing uses EditTextOnKeyboard, never commitText to
+the external editor. Existing rollback, Back, lifecycle, query filtering and pick tests
+remain; new tests cover the real non-Map catalog and wrong-receiver failure.
+
+Visual template is the native Edit/Edit-and-add control (0x7f0b0525/526), not the toggle.
+Framework ImageButton tints are cleared; the native inner background's View tint and
+foreground press drawable are retained on copies. A native graphics regression renders
+an initially white resource with the gray translucent native tint and a white lens.
+Physical search layout, typing isolation and return remain acceptance tests on S25 Ultra.

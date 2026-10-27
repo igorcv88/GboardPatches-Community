@@ -39,7 +39,18 @@ public final class ClipboardNativeSearch1803 {
     static final boolean DELETE_REVIEWED = false;
     private static java.lang.ref.WeakReference<Object> controller = new java.lang.ref.WeakReference<>(null);
     public static void controllerPrepared(Object value) {
-        if (main()) controller = new java.lang.ref.WeakReference<>(value);
+        if (!main() || value == null) return;
+        // The entry hook owns an mlh, not M's overwritten return register (mln).
+        // Keep the last valid controller if an incompatible caller is ever observed.
+        try {
+            Object catalog = ClipboardNative1803.field(value, "h");
+            // ays is SimpleArrayMap, not java.util.Map. Check its reviewed get ABI.
+            if (catalog != null) {
+                catalog.getClass().getMethod("get", Object.class);
+                controller = new java.lang.ref.WeakReference<>(value);
+            }
+        } catch (Throwable ignored) { }
+
     }
 
     private static java.lang.ref.WeakReference<InputMethodService> inputService = new java.lang.ref.WeakReference<>(null);
@@ -47,6 +58,8 @@ public final class ClipboardNativeSearch1803 {
         if (!main()) return;
         end(); inputService = new java.lang.ref.WeakReference<>(value instanceof InputMethodService ime ? ime : null);
     }
+
+    static Object returnAction() { return ClipboardNative1803.clipboardAction(controller.get()); }
 
     private static ClipboardNativeSearchSession active;
     private static ClipboardSearchSurface surface;
@@ -74,7 +87,7 @@ public final class ClipboardNativeSearch1803 {
                         | android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
                         | android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN);
             }
-            Object returnAction = ClipboardNative1803.clipboardAction(controller.get());
+            Object returnAction = returnAction();
             Object alphabetAction = ClipboardNative1803.backKeyAction(anchor.getRootView());
             if (returnAction == null || alphabetAction == null) {
                 reportState(returnAction == null ? "missing-return-action" : "missing-alphabet-action"); return false;

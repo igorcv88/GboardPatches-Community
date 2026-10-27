@@ -67,6 +67,12 @@ def main(path):
     interceptor = next(i for i, ref in enumerate(refs) if 'Ljqy;->e(Landroid/view/View;' in ref)
     children = next(i for i, ref in enumerate(refs) if 'FrameLayout;->dispatchTouchEvent' in ref)
     assert interceptor < children, 'Expected the native interceptor before child dispatch'
+    # mlh.M has three registers: p0=v1; G()'s result overwrites v1 before return.
+    # An exit hook passing p0 therefore captures mln, whose h is boolean, not the catalog.
+    capture = found['Lmlh;', 'M', '(Landroid/view/View;)V']
+    refs = [i.get_output() for i in capture.get_instructions()]
+    g = next(i for i, ref in enumerate(refs) if 'Lmlh;->G()Lmln;' in ref)
+    assert refs[g + 1] == 'v1', 'Recheck controller receiver lifetime'
     fields = {(f.get_name(), f.get_descriptor()) for f in classes['Lmlh;'].get_fields()}
     assert ('h', 'Lays;') in fields
     for name, signature in [('ao', '(Landroid/util/SparseArray;Z)V')]:

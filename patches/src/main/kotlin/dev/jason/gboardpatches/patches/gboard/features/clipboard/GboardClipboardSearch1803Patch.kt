@@ -37,8 +37,15 @@ internal val gboardClipboardSearch1803Patch = bytecodePatch(
                 nop
             """.trimIndent())
         }
-        findMutableMethodOrThrow("Lmlh;", "M", "V", listOf("Landroid/view/View;"))
-            .applyVoidExitLifecycleDelegate(RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_CONTROLLER, "p0 .. p0")
+        // M reuses p0 for G():mln before RETURN_VOID. Capture the mlh receiver at entry.
+        val controller = findMutableMethodOrThrow("Lmlh;", "M", "V", listOf("Landroid/view/View;"))
+        val capture = RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_CONTROLLER
+        if (controller.implementation!!.instructions.none { it.isMethodReference(capture.encodedAbi) }) {
+            controller.addInstructions(0, RuntimeCallEmitter.invoke(capture, "p0 .. p0"))
+        }
+        check(controller.implementation!!.instructions.first().isMethodReference(capture.encodedAbi)) {
+            "Clipboard controller must be captured before M overwrites its receiver"
+        }
         findMutableMethodOrThrow(CLIPBOARD_KEYBOARD_CLASS, "e", "V",
             listOf("Landroid/view/inputmethod/EditorInfo;", "Ljava/lang/Object;"))
             .applyVoidExitLifecycleDelegate(RuntimeCallId.CLIPBOARD_SEARCH_OPENED, "p0 .. p0")

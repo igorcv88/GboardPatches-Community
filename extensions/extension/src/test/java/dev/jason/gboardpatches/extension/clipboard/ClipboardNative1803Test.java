@@ -46,6 +46,16 @@ public class ClipboardNative1803Test {
         assertNull(ClipboardNative1803.clipboardAction(new Object()));
     }
 
+    @Test public void entryCaptureResolvesTheNativeSimpleArrayMapAndRejectsTheOverwrittenManager() throws Exception {
+        Object controller = stubs().getMethod("nativeController").invoke(null);
+        Object overwritten = stubs().getMethod("overwrittenReceiver").invoke(null);
+        assertNull(ClipboardNative1803.clipboardAction(overwritten));
+        ClipboardNativeSearch1803.controllerPrepared(controller);
+        assertEquals(Integer.valueOf(-10124), ClipboardNative1803.actionCode(ClipboardNativeSearch1803.returnAction()));
+        ClipboardNativeSearch1803.controllerPrepared(overwritten);
+        assertEquals(Integer.valueOf(-10124), ClipboardNative1803.actionCode(ClipboardNativeSearch1803.returnAction()));
+    }
+
     @Test public void missingKeyOrManagerNeverDispatches() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         assertNull(ClipboardNative1803.backKeyAction(new FrameLayout(activity)));

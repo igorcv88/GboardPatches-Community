@@ -183,4 +183,32 @@ public class ClipboardSearchUiAdapterTest {
         ui.close();
     }
 
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void editTemplateKeepsGraySkinWhiteLensAndNativePressFeedback() {
+        ClipboardSearchUiAdapter ui = fixture();
+        android.widget.ImageView edit = new android.widget.ImageView(actions.getContext());
+        edit.setId(0x7f0b0526);
+        android.graphics.drawable.GradientDrawable circle = new android.graphics.drawable.GradientDrawable();
+        circle.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        circle.setColor(android.graphics.Color.WHITE); // Untinted native resource is white.
+        edit.setBackground(circle);
+        edit.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0x665f6368));
+        edit.setImageTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE));
+        edit.setForeground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x44ffffff), null, null));
+        actions.addView(edit); edit.layout(160, 0, 208, 48);
+        ui.alignToPeers();
+        assertNull(ui.search.getBackgroundTintList()); assertNull(ui.search.getImageTintList());
+        assertEquals(android.graphics.Color.WHITE, ((ClipboardSearchUiAdapter.SearchIcon)ui.search.getDrawable()).foreground());
+        assertTrue(ui.search.getForeground() instanceof android.graphics.drawable.RippleDrawable);
+        assertNotSame(edit.getForeground(), ui.search.getForeground());
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888);
+        ui.search.getBackground().setBounds(0, 0, 48, 48);
+        ui.search.getBackground().draw(new android.graphics.Canvas(bitmap));
+        int center = bitmap.getPixel(24, 24);
+        assertTrue(android.graphics.Color.alpha(center) < 200);
+        assertEquals(0x5f, android.graphics.Color.red(center), 2);
+        bitmap.recycle(); ui.close();
+    }
+
 }

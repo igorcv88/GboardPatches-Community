@@ -34,6 +34,9 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
         this.actions = actions;
         Context context = actions.getContext();
         search = new ImageButton(context);
+        // Framework ImageButton tints are unrelated to Gboard's skinned SoftKeyView.
+        search.setBackgroundTintList(null);
+        search.setImageTintList(null);
         TypedArray colors = context.obtainStyledAttributes(new int[]{android.R.attr.textColorPrimary});
         int color;
         try { color = colors.getColor(0, 0xffdadce0); } finally { colors.recycle(); }
@@ -61,14 +64,17 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
             if (peer == null || child.getLeft() < peer.getLeft()) peer = child;
         }
         if (peer == null) return;
-        copyNativeTint(peer);
+        View edit = actions.findViewById(0x7f0b0526);
+        if (edit == null || !edit.isShown()) edit = actions.findViewById(0x7f0b0525);
+        View template = edit != null && edit.isShown() ? edit : peer;
+        copyNativeTint(template);
         int width = peer.getWidth(), height = peer.getHeight();
         int right = peer.getLeft(), top = peer.getTop();
         if (search.getLeft() != right - width || search.getTop() != top
                 || search.getWidth() != width || search.getHeight() != height) {
             search.layout(right - width, top, right, top + height);
         }
-        copyNativeBackground(peer);
+        copyNativeBackground(template);
     }
 
     /** The visible circle is often on the SoftKeyView content, not the outer key frame. */
@@ -91,6 +97,11 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
         if (source != null && source.getConstantState() != null) {
             copy = source.getConstantState().newDrawable(search.getResources()).mutate();
             copy.setState(backgroundView.getDrawableState()); copy.setAlpha(source.getAlpha());
+            // Native skin may tint the owning View rather than the drawable's ConstantState.
+            if (backgroundView.getBackgroundTintList() != null) {
+                copy.setTintList(backgroundView.getBackgroundTintList());
+                if (backgroundView.getBackgroundTintMode() != null) copy.setTintMode(backgroundView.getBackgroundTintMode());
+            }
             if (source.getColorFilter() != null) copy.setColorFilter(source.getColorFilter());
         }
         if (copy == null) {
@@ -105,6 +116,11 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
         search.setBackground(new android.graphics.drawable.InsetDrawable(copy,
                 relative.left, relative.top, Math.max(0, peer.getWidth() - relative.right),
                 Math.max(0, peer.getHeight() - relative.bottom)));
+        Drawable foregroundDrawable = backgroundView == null ? null : backgroundView.getForeground();
+        if (foregroundDrawable == null) foregroundDrawable = peer.getForeground();
+        if (foregroundDrawable != null && foregroundDrawable.getConstantState() != null) {
+            search.setForeground(foregroundDrawable.getConstantState().newDrawable(search.getResources()).mutate());
+        } else search.setForeground(null);
         search.setPadding(Math.max(0, relative.left), Math.max(0, relative.top),
                 Math.max(0, peer.getWidth() - relative.right), Math.max(0, peer.getHeight() - relative.bottom));
     }
@@ -158,6 +174,7 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
         if (peer instanceof android.widget.ImageView image) {
             android.content.res.ColorStateList tint = image.getImageTintList();
             if (tint != null) {
+                search.getDrawable().clearColorFilter();
                 ((SearchIcon) search.getDrawable()).color(tint.getColorForState(image.getDrawableState(), tint.getDefaultColor()));
                 return true;
             }
