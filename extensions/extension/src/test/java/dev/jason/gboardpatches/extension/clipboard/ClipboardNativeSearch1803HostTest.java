@@ -195,10 +195,18 @@ public class ClipboardNativeSearch1803HostTest {
         assertFalse(host.restoreRouting());
     }
 
-    @Test public void failedVisibilityCheckRollsBackToClipboardAndDoesNotPoisonTheNextSession() {
+    @Test public void failedVisibilityCheckRollsBackToClipboardAndDoesNotPoisonTheNextSession() throws Exception {
         Service service = Robolectric.setupService(Service.class);
         FakeHost first = new FakeHost();
         assertTrue(ClipboardNativeSearch1803.start(service, new Field(service), List.of(), first));
+        // FakeHost does not own a window. Attach the surface so View.postDelayed's
+        // attach queue runs, then reproduce the hidden ancestor from the device dump.
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        java.lang.reflect.Field surfaceField = ClipboardNativeSearch1803.class.getDeclaredField("surface");
+        surfaceField.setAccessible(true);
+        View shown = (View) surfaceField.get(null);
+        activity.setContentView(shown);
+        shown.setVisibility(View.GONE);
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(501));
         assertFalse(ClipboardNativeSearch1803.isOpen());
         assertEquals(List.of("surface", "alphabet", "route", "restore", "hide", "clipboard"), first.calls);
