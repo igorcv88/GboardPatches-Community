@@ -163,3 +163,8 @@ Framework ImageButton tints are cleared; the native inner background's View tint
 foreground press drawable are retained on copies. A native graphics regression renders
 an initially white resource with the gray translucent native tint and a white lens.
 Physical search layout, typing isolation and return remain acceptance tests on S25 Ultra.
+
+The graphics test also catches assignment order: ImageButton.setBackground reapplies
+its cleared framework tint through InsetDrawable, removing a previously copied tint.
+Apply the native tint after assigning the background, with explicit native View tint
+precedence over a drawable filter. This keeps the copied circle translucent.

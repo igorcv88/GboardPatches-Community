@@ -97,12 +97,6 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
         if (source != null && source.getConstantState() != null) {
             copy = source.getConstantState().newDrawable(search.getResources()).mutate();
             copy.setState(backgroundView.getDrawableState()); copy.setAlpha(source.getAlpha());
-            // Native skin may tint the owning View rather than the drawable's ConstantState.
-            if (backgroundView.getBackgroundTintList() != null) {
-                copy.setTintList(backgroundView.getBackgroundTintList());
-                if (backgroundView.getBackgroundTintMode() != null) copy.setTintMode(backgroundView.getBackgroundTintMode());
-            }
-            if (source.getColorFilter() != null) copy.setColorFilter(source.getColorFilter());
         }
         if (copy == null) {
             android.graphics.drawable.GradientDrawable circle = new android.graphics.drawable.GradientDrawable();
@@ -116,6 +110,14 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
         search.setBackground(new android.graphics.drawable.InsetDrawable(copy,
                 relative.left, relative.top, Math.max(0, peer.getWidth() - relative.right),
                 Math.max(0, peer.getHeight() - relative.bottom)));
+        // setBackground reapplies ImageButton's cleared framework tint, including through
+        // InsetDrawable. Apply the native skin AFTER assignment, or it becomes solid white.
+        if (source != null && backgroundView != null) {
+            if (backgroundView.getBackgroundTintList() != null) {
+                copy.setTintList(backgroundView.getBackgroundTintList());
+                if (backgroundView.getBackgroundTintMode() != null) copy.setTintMode(backgroundView.getBackgroundTintMode());
+            } else if (source.getColorFilter() != null) copy.setColorFilter(source.getColorFilter());
+        }
         Drawable foregroundDrawable = backgroundView == null ? null : backgroundView.getForeground();
         if (foregroundDrawable == null) foregroundDrawable = peer.getForeground();
         if (foregroundDrawable != null && foregroundDrawable.getConstantState() != null) {
