@@ -83,6 +83,22 @@ public class ClipboardSearchStyleTest {
         assertEquals(Math.max(Math.round(2 * density), 8), style.cardGap);
     }
 
+    @Test public void translucentWideCardUsesRelativeCoverageInsteadOfBecomingACapsule() {
+        nativeClipboard();
+        android.view.ViewGroup item = (android.view.ViewGroup) list.getChildAt(1);
+        View card = item.getChildAt(0);
+        // Wrapper forces bitmap extraction, as for a native stateful/composite drawable.
+        GradientDrawable shape = new GradientDrawable();
+        shape.setColor(0x663c4043); shape.setCornerRadius(16);
+        card.setBackground(new android.graphics.drawable.LayerDrawable(
+                new android.graphics.drawable.Drawable[]{shape}));
+        ClipboardSearchStyle style = ClipboardSearchStyle.capture(list, null);
+        assertEquals(0x66, Color.alpha(style.cardColor), 1);
+        assertTrue(card.getWidth() > card.getHeight() * 3);
+        assertEquals(16f, style.cardRadius, 3f);
+        assertTrue(style.cardRadius < card.getHeight() / 4f);
+    }
+
     @Test public void surfaceUsesTheCapturedLookWithoutUnderlineOrOpaqueThemeBackground() {
         nativeClipboard();
         ClipboardSearchStyle style = ClipboardSearchStyle.capture(list, null);

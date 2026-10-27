@@ -72,12 +72,27 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
         copyNativeTint(template);
         copyGlyphSize(template);
         int width = peer.getWidth(), height = peer.getHeight();
-        int right = peer.getLeft(), top = peer.getTop();
+        int right = peer.getLeft() - nativeGap(peer), top = peer.getTop();
         if (search.getLeft() != right - width || search.getTop() != top
                 || search.getWidth() != width || search.getHeight() != height) {
             search.layout(right - width, top, right, top + height);
         }
         copyNativeBackground(template);
+    }
+
+    /** Physical edge gap of the nearest two native controls, already scaled by Gboard. */
+    private int nativeGap(View first) {
+        View next = null;
+        for (int i = 0; i < actions.getChildCount(); i++) {
+            View child = actions.getChildAt(i);
+            if (child == search || child == first || child.getVisibility() != View.VISIBLE
+                    || child.getWidth() <= 0 || child.getHeight() <= 0 || child.getLeft() < first.getRight()) continue;
+            if (next == null || child.getLeft() < next.getLeft()) next = child;
+        }
+        if (next != null) return next.getLeft() - first.getRight();
+        if (first.getLayoutParams() instanceof ViewGroup.MarginLayoutParams margins)
+            return Math.max(0, margins.leftMargin + margins.rightMargin);
+        return 0;
     }
 
     /** Color of the disc behind the lens, as the native Edit control renders it. */
