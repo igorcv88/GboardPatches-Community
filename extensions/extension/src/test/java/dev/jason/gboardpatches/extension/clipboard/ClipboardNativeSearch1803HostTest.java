@@ -92,7 +92,7 @@ public class ClipboardNativeSearch1803HostTest {
         region.touchableInsets = InputMethodService.Insets.TOUCHABLE_INSETS_REGION;
         region.touchableRegion.set(0, 900, 1080, 1600);
         region.visibleTopInsets = 900; region.contentTopInsets = 900;
-        ClipboardNativeSearch1803.apply(region, new Rect(0, 500, 1080, 900));
+        ClipboardNativeSearch1803.apply(region, new Rect(0, 500, 1080, 900), new Rect(0, 0, 1080, 1600));
         assertEquals(new Rect(0, 500, 1080, 1600), region.touchableRegion.getBounds());
         assertEquals(500, region.visibleTopInsets);
         assertEquals(900, region.contentTopInsets); // Editor is not resized behind the surface.
@@ -100,13 +100,44 @@ public class ClipboardNativeSearch1803HostTest {
         InputMethodService.Insets visible = new InputMethodService.Insets();
         visible.touchableInsets = InputMethodService.Insets.TOUCHABLE_INSETS_VISIBLE;
         visible.visibleTopInsets = 900; visible.contentTopInsets = 900;
-        ClipboardNativeSearch1803.apply(visible, new Rect(0, 500, 1080, 900));
+        ClipboardNativeSearch1803.apply(visible, new Rect(0, 500, 1080, 900), new Rect(0, 0, 1080, 1600));
         assertEquals(500, visible.visibleTopInsets);
-        assertTrue(visible.touchableRegion.isEmpty());
+        assertEquals(new Rect(0, 500, 1080, 1600), visible.touchableRegion.getBounds());
 
         ClipboardNativeSearch1803.beforeComputeInsets(visible);
         ClipboardNativeSearch1803.afterComputeInsets(); // No open search: untouched.
         assertEquals(500, visible.visibleTopInsets);
+    }
+
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void everyNativeModePreservesExactlyItsOriginalRegionPlusTheBoundedPanel() {
+        Rect window = new Rect(0, 0, 1080, 1600);
+        Rect panel = new Rect(200, 500, 880, 900);
+        for (int mode : new int[]{InputMethodService.Insets.TOUCHABLE_INSETS_FRAME,
+                InputMethodService.Insets.TOUCHABLE_INSETS_CONTENT,
+                InputMethodService.Insets.TOUCHABLE_INSETS_VISIBLE,
+                InputMethodService.Insets.TOUCHABLE_INSETS_REGION}) {
+            InputMethodService.Insets value = new InputMethodService.Insets();
+            value.touchableInsets = mode;
+            value.contentTopInsets = 1000; value.visibleTopInsets = 900;
+            // Nonrectangular native REGION: preserve holes and floating-keyboard sides.
+            value.touchableRegion.set(100, 1000, 500, 1600);
+            value.touchableRegion.op(new Rect(600, 1100, 900, 1600), android.graphics.Region.Op.UNION);
+            android.graphics.Region expected = new android.graphics.Region();
+            if (mode == InputMethodService.Insets.TOUCHABLE_INSETS_REGION) expected.set(value.touchableRegion);
+            else expected.set(0, mode == InputMethodService.Insets.TOUCHABLE_INSETS_FRAME ? 0
+                    : mode == InputMethodService.Insets.TOUCHABLE_INSETS_CONTENT ? 1000 : 900, 1080, 1600);
+            expected.op(panel, android.graphics.Region.Op.UNION);
+            ClipboardNativeSearch1803.apply(value, panel, window);
+            android.graphics.Region difference = new android.graphics.Region(expected);
+            difference.op(value.touchableRegion, android.graphics.Region.Op.XOR);
+            assertTrue("mode=" + mode + " diff=" + difference, difference.isEmpty());
+            assertEquals(InputMethodService.Insets.TOUCHABLE_INSETS_REGION, value.touchableInsets);
+            assertEquals(1000, value.contentTopInsets);
+            assertTrue(value.touchableRegion.contains(300, 600));
+            if (mode != InputMethodService.Insets.TOUCHABLE_INSETS_FRAME)
+                assertFalse(value.touchableRegion.contains(50, 600)); // App beside panel stays reachable.
+        }
     }
 
     @Test public void backAndLifecycleHooksAreInertWithoutAnOpenSearch() {

@@ -85,7 +85,9 @@ final class ClipboardSearchStyle {
                 b.cardColor = ClipboardNativeSkin.centerColor(bitmap, area, ClipboardNativeSkin.alpha(card, item));
                 // A rounded corner of radius r enters the diagonal at r(1 - 1/sqrt 2).
                 int max = Math.min(area.width(), area.height()) / 2, t = 0;
-                while (t < max && Color.alpha(bitmap.getPixel(area.left + t, area.top + t)) < 0x80) t++;
+                int interiorAlpha = Color.alpha(bitmap.getPixel(area.centerX(), area.centerY()));
+                int threshold = Math.max(1, (interiorAlpha + 1) / 2);
+                while (t < max && Color.alpha(bitmap.getPixel(area.left + t, area.top + t)) < threshold) t++;
                 b.cardRadius = Math.min(max, t / 0.29289f);
             } finally { bitmap.recycle(); }
             Rect cardRect = rectIn(item, card), textRect = rectIn(item, text);

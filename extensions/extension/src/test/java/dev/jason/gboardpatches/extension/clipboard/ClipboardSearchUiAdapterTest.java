@@ -31,6 +31,25 @@ public class ClipboardSearchUiAdapterTest {
         ui.search.performClick();
         assertEquals(1, searches[0]);
     }
+    @Test public void searchCopiesTheScaledNativeGapAndKeepsAnIndependentHitArea() {
+        ClipboardSearchUiAdapter ui = fixture();
+        View next = new View(actions.getContext());
+        actions.addView(next, new LinearLayout.LayoutParams(48, 48));
+        next.layout(160, 0, 208, 48); // Native gap = 12; no dp/px offset in production.
+        ui.alignToPeers();
+        assertEquals(12, peer.getLeft() - ui.search.getRight());
+        assertEquals(peer.getWidth(), ui.search.getWidth());
+        root.bridge = true;
+        event(android.view.MotionEvent.ACTION_DOWN, true);
+        event(android.view.MotionEvent.ACTION_UP, true);
+        assertEquals(1, picks);
+        peer.layout(140, 0, 212, 72); next.layout(230, 0, 302, 72);
+        ui.alignToPeers();
+        assertEquals(18, peer.getLeft() - ui.search.getRight());
+        assertEquals(72, ui.search.getHeight());
+        ui.close();
+    }
+
     static final class NativeRoot extends android.widget.FrameLayout {
         ClipboardSearchUiAdapter ui;
         boolean bridge;

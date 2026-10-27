@@ -62,6 +62,54 @@ public class ClipboardSearchSurfaceTest {
         assertEquals(1, closes[0]);
     }
 
+    private static void touch(ClipboardSearchSurface surface, long start, long at, int action, float x, float y) {
+        android.view.MotionEvent event = android.view.MotionEvent.obtain(start, at, action, x, y, 0);
+        surface.dispatchTouchEvent(event);
+        event.recycle();
+    }
+
+    @Test public void dispatchedFingerGesturesPickScrollAndCloseWithoutPhantomClicks() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        List<ClipboardSearchSurface.Clip> picked = new ArrayList<>();
+        int[] closes = {0};
+        ClipboardSearchSurface surface = new ClipboardSearchSurface(activity, new EditText(activity), 400,
+                ClipboardSearchController.forImeMainThread(), new ClipboardSearchSurface.Listener() {
+                    public void onPick(ClipboardSearchSurface.Clip clip) { picked.add(clip); }
+                    public void onClose() { closes[0]++; }
+                });
+        List<ClipboardSearchSurface.Clip> clips = new ArrayList<>();
+        for (int i = 0; i < 80; i++) clips.add(new ClipboardSearchSurface.Clip(i, R, "test row " + i));
+        surface.setClips(clips);
+        activity.setContentView(surface);
+        surface.measure(View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY));
+        surface.layout(0, 0, 600, 400);
+        View row = surface.results.getChildAt(0);
+        assertNotNull(row);
+        float x = 300, y = surface.results.getTop() + row.getTop() + row.getHeight() / 2f;
+        touch(surface, 0, 0, 0, x, y);
+        touch(surface, 0, 50, 1, x, y);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(List.of(clips.get(0)), picked);
+        int before = surface.results.getChildAt(0).getTop();
+        float bottom = surface.results.getBottom() - 20;
+        touch(surface, 100, 100, 0, x, bottom);
+        for (int step = 1; step <= 8; step++) touch(surface, 100, 100 + step * 30, 2, x, bottom - step * 20);
+        touch(surface, 100, 370, 1, x, bottom - 160);
+        assertTrue(surface.results.getFirstVisiblePosition() > 0 || surface.results.getChildAt(0).getTop() < before);
+        assertEquals(1, picked.size()); // A drag must not paste.
+        touch(surface, 400, 400, 0, -20, -20);
+        touch(surface, 400, 450, 1, -20, -20);
+        assertEquals(1, picked.size()); assertEquals(0, closes[0]);
+        android.graphics.Rect back = new android.graphics.Rect(0, 0, surface.close.getWidth(), surface.close.getHeight());
+        surface.offsetDescendantRectToMyCoords(surface.close, back);
+        touch(surface, 500, 500, 0, back.centerX(), back.centerY());
+        touch(surface, 500, 550, 1, back.centerX(), back.centerY());
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(1, closes[0]);
+        surface.close();
+    }
+
     @Test public void visibleQueryIsBoundedLikeTheSearchedQuery() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         EditText field = new EditText(activity);

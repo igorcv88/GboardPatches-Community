@@ -78,13 +78,20 @@ public final class ClipboardSearchSurface extends LinearLayout {
         LinearLayout bar = new LinearLayout(context);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(gap * 2, gap * 2, gap * 2, gap);
-        close = new ImageButton(context, null, 0);
+        close = new ImageButton(context, null, 0) {
+            @Override public boolean dispatchTouchEvent(android.view.MotionEvent event) {
+                ClipboardSearchDiagnostics.touch("back", event);
+                return super.dispatchTouchEvent(event);
+            }
+        };
         close.setImageDrawable(new BackIcon(style.iconColor, Math.round(style.controlSize * 0.5f)));
         close.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
         close.setBackground(pill(style.controlColor, style.controlSize / 2f));
         close.setPadding(0, 0, 0, 0);
         close.setContentDescription("Back to clipboard");
-        close.setOnClickListener(v -> { if (!this.closed) this.listener.onClose(); });
+        close.setOnClickListener(v -> {
+            if (!this.closed) { ClipboardSearchDiagnostics.state("back-click"); this.listener.onClose(); }
+        });
         bar.addView(close, new LayoutParams(style.controlSize, style.controlSize));
         FrameLayout slot = new FrameLayout(context);
         slot.setBackground(pill(style.controlColor, style.controlSize / 2f));
@@ -110,7 +117,20 @@ public final class ClipboardSearchSurface extends LinearLayout {
             }
         }
 
-        results = new ListView(context);
+        results = new ListView(context) {
+            @Override public boolean dispatchTouchEvent(android.view.MotionEvent event) {
+                ClipboardSearchDiagnostics.touch("list", event);
+                return super.dispatchTouchEvent(event);
+            }
+        };
+        results.setOnScrollListener(new android.widget.AbsListView.OnScrollListener() {
+            public void onScrollStateChanged(android.widget.AbsListView view, int state) {
+                ClipboardSearchDiagnostics.state("scroll-state=" + state);
+            }
+            public void onScroll(android.widget.AbsListView view, int first, int visible, int total) {
+                ClipboardSearchDiagnostics.state("scroll first=" + first + " visible=" + visible + " total=" + total);
+            }
+        });
         results.setAdapter(adapter);
         results.setDivider(null);
         results.setDividerHeight(0);
@@ -128,6 +148,7 @@ public final class ClipboardSearchSurface extends LinearLayout {
                 if (confirm) this.listener.onDelete(clip);
                 return;
             }
+            ClipboardSearchDiagnostics.state("result-click");
             this.listener.onPick(clip);
         });
         results.setOnItemLongClickListener((parent, view, position, id) -> {
@@ -157,6 +178,11 @@ public final class ClipboardSearchSurface extends LinearLayout {
             text.setFilters(filters);
             text.addTextChangedListener(watcher);
         }
+    }
+
+    @Override public boolean dispatchTouchEvent(android.view.MotionEvent event) {
+        ClipboardSearchDiagnostics.touch("panel", event);
+        return super.dispatchTouchEvent(event);
     }
 
     /** Snapshot in native order; never expose unfiltered rows during an active query. */

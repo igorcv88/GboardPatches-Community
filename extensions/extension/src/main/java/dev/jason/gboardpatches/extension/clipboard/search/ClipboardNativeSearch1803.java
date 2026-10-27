@@ -201,7 +201,7 @@ public final class ClipboardNativeSearch1803 {
 
     /**
      * Loup.onComputeInsets entry/exit. Keeps Gboard's own result and only adds the shown surface:
-     * touchable region union in REGION mode, otherwise the visible top moves up to the surface.
+     * reconstructs the native touch region before adding the surface in every native mode.
      * Content insets are not changed, so the editor is not resized behind the surface.
      */
     public static void beforeComputeInsets(Object value) {
@@ -219,14 +219,36 @@ public final class ClipboardNativeSearch1803 {
             current.getLocationInWindow(location);
             Rect rect = new Rect(location[0], location[1],
                     location[0] + current.getWidth(), location[1] + current.getHeight());
-            apply(insets, rect);
+            View root = current.getRootView();
+            Rect window = new Rect(0, 0, root.getWidth(), root.getHeight());
+            ClipboardSearchDiagnostics.insets("native", insets, rect);
+            apply(insets, rect, window);
+            ClipboardSearchDiagnostics.insets("union", insets, rect);
         } catch (Throwable failure) { report("insets", failure); }
     }
 
-    static void apply(InputMethodService.Insets insets, Rect surfaceRect) {
-        if (insets.touchableInsets == InputMethodService.Insets.TOUCHABLE_INSETS_REGION) {
-            insets.touchableRegion.op(surfaceRect, Region.Op.UNION);
+    static void apply(InputMethodService.Insets insets, Rect surfaceRect, Rect window) {
+        if (window.isEmpty() || surfaceRect.isEmpty()) return;
+        Region nativeRegion = new Region();
+        switch (insets.touchableInsets) {
+            case InputMethodService.Insets.TOUCHABLE_INSETS_REGION:
+                nativeRegion.set(insets.touchableRegion);
+                break;
+            case InputMethodService.Insets.TOUCHABLE_INSETS_CONTENT:
+                nativeRegion.set(window.left, Math.max(window.top, insets.contentTopInsets), window.right, window.bottom);
+                break;
+            case InputMethodService.Insets.TOUCHABLE_INSETS_VISIBLE:
+                nativeRegion.set(window.left, Math.max(window.top, insets.visibleTopInsets), window.right, window.bottom);
+                break;
+            case InputMethodService.Insets.TOUCHABLE_INSETS_FRAME:
+                nativeRegion.set(window);
+                break;
+            default: return; // Unknown framework mode: leave its semantics intact.
         }
+        Rect panel = new Rect(surfaceRect);
+        if (panel.intersect(window)) nativeRegion.op(panel, Region.Op.UNION);
+        insets.touchableRegion.set(nativeRegion);
+        insets.touchableInsets = InputMethodService.Insets.TOUCHABLE_INSETS_REGION;
         insets.visibleTopInsets = Math.min(insets.visibleTopInsets, surfaceRect.top);
     }
 

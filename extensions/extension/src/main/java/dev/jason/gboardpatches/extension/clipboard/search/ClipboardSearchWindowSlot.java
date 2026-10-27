@@ -102,6 +102,11 @@ final class ClipboardSearchWindowSlot implements AutoCloseable {
         if (anchorState == Anchor.WAITING_FOR_KEYBOARD && keyboard() != null && placed) {
             anchorState = Anchor.ANCHORED;
             owned.setAlpha(1f);
+            // onComputeInsets may have run while alpha was zero. Schedule a traversal
+            // after anchoring, even when no more geometry changes are necessary.
+            owned.getRootView().requestLayout();
+            owned.requestApplyInsets();
+            ClipboardSearchDiagnostics.anchor(owned);
         }
         return true;
     }
