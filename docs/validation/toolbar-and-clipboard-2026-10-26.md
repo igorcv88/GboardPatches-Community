@@ -110,9 +110,9 @@ SoftKeyView background, which may be transparent.
 The original APK's InputView.dispatchTouchEvent has seven registers and invokes
 Ljqy.e(View, MotionEvent) before FrameLayout.dispatchTouchEvent. That interceptor
 can return true without dispatching to a SoftKeyboardView. The search hook now runs
-at InputView entry, before that branch. Hit testing uses local viewport coordinates
-and window-relative origins, without combining raw screen positions with a
-root-relative visible rectangle. Tests include a translated viewport and a parent
+at InputView entry, before that branch. Hit testing uses offsetDescendantRectToMyCoords to stay in local viewport
+coordinates, without combining raw/screen/window positions with a root-relative
+visible rectangle. Tests include a translated viewport and a parent
 that consumes events without dispatching to child keyboard views.
 
 The search lens is 20 dp, centered in peer-sized bounds. Background discovery walks

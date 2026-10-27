@@ -182,15 +182,20 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
     private boolean contains(View source, MotionEvent event) {
         if (!attached() || !search.isShown() || !search.isEnabled() || !search.isAttachedToWindow()
                 || search.getWidth() <= 0 || search.getHeight() <= 0) return false;
-        Rect visible = new Rect();
-        if (!search.getGlobalVisibleRect(visible)) return false;
-        int[] root = new int[2], origin = new int[2];
-        search.getRootView().getLocationInWindow(root);
-        source.getLocationInWindow(origin);
-        // getGlobalVisibleRect is in root coordinates; the MotionEvent is local to InputView.
-        // Avoid raw screen coordinates, which the native dispatcher may retain/transform.
-        visible.offset(root[0] - origin[0], root[1] - origin[1]);
-        return visible.contains((int) event.getX(), (int) event.getY());
+        if (!(source instanceof ViewGroup viewport)) return false;
+        View ancestor = search;
+        while (ancestor != source) {
+            android.view.ViewParent parent = ancestor.getParent();
+            if (!(parent instanceof View view)) return false;
+            ancestor = view;
+        }
+        if (!search.getGlobalVisibleRect(new Rect())) return false;
+        Rect target = new Rect(0, 0, search.getWidth(), search.getHeight());
+        // Stay entirely in the same hierarchy as InputView's local MotionEvent. No raw,
+        // screen, window or root-relative coordinate arithmetic is needed.
+        viewport.offsetDescendantRectToMyCoords(search, target);
+        if (!target.intersect(0, 0, viewport.getWidth(), viewport.getHeight())) return false;
+        return target.contains((int) event.getX(), (int) event.getY());
     }
 
     /** Consumes only a gesture started on search. Stock keys and drags are otherwise untouched. */

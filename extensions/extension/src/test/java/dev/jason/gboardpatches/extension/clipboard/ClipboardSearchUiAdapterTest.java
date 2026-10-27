@@ -55,8 +55,8 @@ public class ClipboardSearchUiAdapterTest {
         activity.setContentView(root);
         View decor = activity.getWindow().getDecorView();
         decor.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(300, View.MeasureSpec.EXACTLY));
-        decor.layout(0, 0, 400, 300);
+                View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY));
+        decor.layout(0, 0, 400, 600);
         root.layout(0, 0, 400, 200); actions.layout(100, 0, 340, 60);
         // Simulate native scaled-key positioning leaving a gap before the first stock key.
         peer.layout(100, 0, 148, 48);
@@ -116,6 +116,7 @@ public class ClipboardSearchUiAdapterTest {
     @Test public void viewportCoordinatesWorkWhenTheKeyboardIsTranslatedAwayFromScreenOrigin() {
         ClipboardSearchUiAdapter ui = fixture(); root.bridge = true;
         root.layout(30, 170, 430, 370);
+        assertTrue(ui.search.getGlobalVisibleRect(new android.graphics.Rect()));
         event(android.view.MotionEvent.ACTION_DOWN, true); event(android.view.MotionEvent.ACTION_UP, true);
         assertEquals(1, picks);
         ui.close();
