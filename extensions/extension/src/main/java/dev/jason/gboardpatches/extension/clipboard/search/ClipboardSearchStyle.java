@@ -3,7 +3,6 @@ package dev.jason.gboardpatches.extension.clipboard;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
-import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.Typeface;
@@ -11,8 +10,6 @@ import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Appearance of the search surface, read from the native clipboard while it is on screen:
@@ -32,10 +29,13 @@ final class ClipboardSearchStyle {
         cardGap = b.cardGap; controlSize = b.controlSize; maxLines = b.maxLines; typeface = b.typeface;
     }
 
+    static final int MAX_PROBED_ROWS = 6;
+
     static ClipboardSearchStyle fallback(Context context) { return new Builder(context).build(); }
 
     /** Reads the live clipboard: recycler is the native history list, ui the header search action. */
     static ClipboardSearchStyle capture(View recycler, ClipboardSearchUiAdapter ui) {
+        long started = android.os.SystemClock.elapsedRealtimeNanos();
         Builder b = new Builder(recycler.getContext());
         try { backdrop(b, recycler); } catch (Throwable ignored) { }
         try { card(b, recycler); } catch (Throwable ignored) { }
@@ -47,55 +47,39 @@ final class ClipboardSearchStyle {
             }
         } catch (Throwable ignored) { }
         if (b.controlColor == 0) b.controlColor = ClipboardNativeSkin.withAlpha(b.iconColor, 0x1c);
+        // Header controls sit on the panel backdrop here, not on the native header.
+        b.controlColor = ClipboardNativeSkin.legibleDisc(b.iconColor, b.controlColor, b.panelColor);
+        // Runs on the IME thread at the search tap; measured on device, not assumed cheap.
+        android.util.Log.i("GboardPatches", "Clipboard search style captured in "
+                + (android.os.SystemClock.elapsedRealtimeNanos() - started) / 1000 + " us");
         return b.build();
     }
 
     /** Composites the backgrounds between the IME input area and the list at its center. */
     private static void backdrop(Builder b, View recycler) {
-        List<View> chain = new ArrayList<>();
-        for (View view = recycler; view != null; ) {
-            chain.add(0, view);
-            // Backgrounds above inputArea are shared with the search slot: never paint them twice.
-            if (view.getId() == android.R.id.inputArea || !(view.getParent() instanceof View parent)
-                    || parent.getParent() == null || !(parent.getParent() instanceof View)) break;
-            view = parent;
-        }
         int[] location = new int[2];
         recycler.getLocationInWindow(location);
-        int x = location[0] + recycler.getWidth() / 2, y = location[1] + recycler.getHeight() / 2;
-        Bitmap pixel = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
-        try {
-            Canvas canvas = new Canvas(pixel);
-            View top = chain.get(0);
-            for (View view : chain) {
-                Drawable background = view.getBackground();
-                if (background == null || view.getVisibility() != View.VISIBLE) continue;
-                view.getLocationInWindow(location);
-                Rect bounds = background.copyBounds();
-                if (bounds.isEmpty()) background.setBounds(0, 0, view.getWidth(), view.getHeight());
-                int layer = canvas.saveLayerAlpha(0, 0, 1, 1, Math.round(255 * ClipboardNativeSkin.alpha(view, top)));
-                canvas.translate(location[0] - x, location[1] - y);
-                background.draw(canvas);
-                canvas.restoreToCount(layer);
-                if (bounds.isEmpty()) background.setBounds(bounds);
-            }
-            int color = pixel.getPixel(0, 0);
-            if (Color.alpha(color) > 0) b.panelColor = color;
-        } finally { pixel.recycle(); }
+        // Backgrounds above inputArea are shared with the search slot: never paint them twice.
+        int color = ClipboardNativeSkin.backdrop(recycler, location[0] + recycler.getWidth() / 2,
+                location[1] + recycler.getHeight() / 2, android.R.id.inputArea);
+        if (Color.alpha(color) > 0) b.panelColor = color;
     }
 
     /** First history card on screen: its rendered color, corner radius, text and spacing. */
     private static void card(Builder b, View recycler) {
         if (!(recycler instanceof ViewGroup list)) return;
         float density = recycler.getResources().getDisplayMetrics().density;
-        for (int i = 0; i < list.getChildCount(); i++) {
+        // A few rows always include a card after at most a section header or two.
+        for (int i = 0; i < Math.min(list.getChildCount(), MAX_PROBED_ROWS); i++) {
             View item = list.getChildAt(i);
             if (item.getVisibility() != View.VISIBLE || item.getWidth() <= 0 || item.getHeight() <= 0) continue;
-            View card = painted(item);
             TextView text = text(item);
-            if (card == null || text == null) continue; // Section headers have no card.
-            Bitmap bitmap = ClipboardNativeSkin.render(card.getBackground(), card.getWidth(), card.getHeight());
-            if (bitmap == null) continue;
+            if (text == null) continue;
+            if (reuse(b, item, text)) return;
+            Bitmap[] rendered = new Bitmap[1];
+            View card = painted(item, rendered);
+            if (card == null) continue; // Section headers have no card.
+            Bitmap bitmap = rendered[0]; // Rendered once: detection and sampling share it.
             try {
                 Rect area = ClipboardNativeSkin.opaqueBounds(bitmap);
                 b.cardColor = ClipboardNativeSkin.centerColor(bitmap, area, ClipboardNativeSkin.alpha(card, item));
@@ -112,25 +96,73 @@ final class ClipboardSearchStyle {
                 gap += margins.topMargin + margins.bottomMargin;
             }
             b.cardGap = clamp(gap, density, 2, 16);
-            b.textColor = text.getCurrentTextColor();
-            b.textSize = text.getTextSize();
-            b.typeface = text.getTypeface();
-            if (text.getMaxLines() > 0 && text.getMaxLines() < 6) b.maxLines = text.getMaxLines();
+            text(b, text);
+            remember(b, card);
             return;
         }
     }
 
-    private static View painted(View view) {
+    private static void text(Builder b, TextView text) {
+        b.textColor = text.getCurrentTextColor();
+        b.textSize = text.getTextSize();
+        b.typeface = text.getTypeface();
+        if (text.getMaxLines() > 0 && text.getMaxLines() < 6) b.maxLines = text.getMaxLines();
+    }
+
+    /** Last card measurement, valid while the same native drawable renders the same way. */
+    private static java.lang.ref.WeakReference<Drawable> cardDrawable = new java.lang.ref.WeakReference<>(null);
+    private static int cardKey, cachedColor, cachedPaddingH, cachedPaddingV, cachedGap;
+    private static float cachedRadius;
+
+    private static int key(View card) {
+        Drawable background = card.getBackground();
+        // The center pixel catches a recolored drawable instance (theme change without new views).
+        int center = ClipboardNativeSkin.pixel(background, card.getWidth(), card.getHeight(),
+                card.getWidth() / 2, card.getHeight() / 2);
+        return (((java.util.Arrays.hashCode(card.getDrawableState()) * 31 + background.getAlpha()) * 31
+                + card.getWidth()) * 31 + card.getHeight()) * 31 + center
+                + Float.floatToIntBits(ClipboardNativeSkin.alpha(card, null));
+    }
+
+    private static void remember(Builder b, View card) {
+        cardDrawable = new java.lang.ref.WeakReference<>(card.getBackground());
+        cardKey = key(card); cachedColor = b.cardColor; cachedRadius = b.cardRadius;
+        cachedPaddingH = b.cardPaddingH; cachedPaddingV = b.cardPaddingV; cachedGap = b.cardGap;
+    }
+
+    /** Skips rendering when this row's card is the drawable measured last time, unchanged. */
+    private static boolean reuse(Builder b, View item, TextView text) {
+        Drawable known = cardDrawable.get();
+        View card = known == null ? null : owner(item, known);
+        if (card == null || key(card) != cardKey) return false;
+        b.cardColor = cachedColor; b.cardRadius = cachedRadius;
+        b.cardPaddingH = cachedPaddingH; b.cardPaddingV = cachedPaddingV; b.cardGap = cachedGap;
+        text(b, text);
+        return true;
+    }
+
+    private static View owner(View view, Drawable background) {
+        if (view.getBackground() == background) return view;
+        if (view instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View found = owner(group.getChildAt(i), background);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    private static View painted(View view, Bitmap[] rendered) {
         Drawable background = view.getBackground();
         if (background != null && view.getWidth() > 0 && view.getHeight() > 0) {
             Bitmap probe = ClipboardNativeSkin.render(background, view.getWidth(), view.getHeight());
-            if (probe != null) { probe.recycle(); return view; }
+            if (probe != null) { rendered[0] = probe; return view; }
         }
         if (view instanceof ViewGroup group) {
             for (int i = 0; i < group.getChildCount(); i++) {
                 View child = group.getChildAt(i);
                 if (child.getVisibility() != View.VISIBLE) continue;
-                View found = painted(child);
+                View found = painted(child, rendered);
                 if (found != null) return found;
             }
         }

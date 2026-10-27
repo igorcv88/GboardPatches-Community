@@ -27,7 +27,7 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
     private int pointer = -1;
     private Drawable nativeBackground;
     private final Rect backgroundBounds = new Rect();
-    private int backgroundWidth, backgroundHeight, backgroundState, controlColor;
+    private int backgroundWidth, backgroundHeight, backgroundState, controlColor, backdropColor;
     private final java.util.Map<Drawable, Boolean> paintedBackgrounds = new java.util.WeakHashMap<>();
     private java.lang.ref.WeakReference<Drawable> renderedGlyph = new java.lang.ref.WeakReference<>(null);
     private int renderedGlyphState;
@@ -84,6 +84,8 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
     int controlColor() { return controlColor; }
     int iconColor() { return ((SearchIcon) search.getDrawable()).foreground(); }
     int controlSize() { return search.getHeight(); }
+    /** Composited header backdrop behind the disc, as last evaluated. */
+    int backdropColor() { return backdropColor; }
 
     /**
      * Previous builds cloned the native drawable via ConstantState and replayed its runtime
@@ -116,11 +118,16 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
             } finally { bitmap.recycle(); }
             if (backgroundView != peer && peer instanceof ViewGroup group) group.offsetDescendantRectToMyCoords(backgroundView, painted);
         }
-        // Last guard: a disc the lens cannot be seen on is never accepted.
-        if (painted == null || Color.alpha(color) == 0 || !ClipboardNativeSkin.contrasts(foreground, color)) {
+        if (painted == null) {
             painted = new Rect(0, 0, peer.getWidth(), peer.getHeight());
             color = ClipboardNativeSkin.withAlpha(foreground, 0x1c);
         }
+        // Last guard, on what is actually composited: lens over disc over the header's own
+        // backdrop. A disc the lens is not legible on is never accepted.
+        int[] at = new int[2];
+        peer.getLocationInWindow(at);
+        backdropColor = ClipboardNativeSkin.backdrop(actions, at[0] + painted.centerX(), at[1] + painted.centerY(), 0);
+        color = ClipboardNativeSkin.legibleDisc(foreground, color, backdropColor);
         controlColor = color;
         int diameter = Math.min(painted.width(), painted.height());
         int left = painted.centerX() - diameter / 2, top = painted.centerY() - diameter / 2;

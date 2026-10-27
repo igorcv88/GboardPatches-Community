@@ -105,9 +105,16 @@ public class ClipboardSearchWindowSlotTest {
         ClipboardSearchWindowSlot slot = new ClipboardSearchWindowSlot(candidates, fullscreen);
         View surface = new View(activity);
         slot.attach(surface, 240); layout();
-        assertEquals(0, top(surface)); // The reported gap: surface at the window top.
+        assertEquals(0, top(surface)); // The reported gap: surface at the window top...
+        assertEquals(0f, surface.getAlpha(), 0f); // ...but never visible there.
+        assertFalse("the frame that moves it off the top is withheld", slot.onPreDraw());
+        assertEquals(0f, surface.getAlpha(), 0f);
+        layout();
         assertEquals(600, top(keyboardRoot));
         settle(slot);
+        assertTrue(slot.onPreDraw());
+        assertEquals(ClipboardSearchWindowSlot.Anchor.ANCHORED, slot.anchorState());
+        assertEquals(1f, surface.getAlpha(), 0f);
         assertEquals(240, surface.getHeight());
         assertEquals(top(keyboardRoot), top(surface) + surface.getHeight());
         assertEquals(600, top(keyboardRoot)); // Keyboard stays where it was.
@@ -145,14 +152,36 @@ public class ClipboardSearchWindowSlotTest {
         slot.close();
     }
 
-    @Test public void withoutANativeKeyboardRootTheBoundedSlotIsLeftAsBefore() {
+    @Test public void withoutAKeyboardRootTheSurfaceWaitsTransparentAndUntouchedThenAnchors() {
         Activity activity = setup();
         ClipboardSearchWindowSlot slot = new ClipboardSearchWindowSlot(candidates, fullscreen);
         View surface = new View(activity);
         slot.attach(surface, 240); layout();
-        assertFalse(slot.anchorToKeyboard());
+        for (int i = 0; i < 5; i++) assertTrue("waiting frames are drawn, transparently", slot.onPreDraw());
+        assertEquals(ClipboardSearchWindowSlot.Anchor.WAITING_FOR_KEYBOARD, slot.anchorState());
+        assertEquals(0f, surface.getAlpha(), 0f);
+        assertTrue(surface.isShown()); // Field stays focusable for routing.
         assertEquals(240, surface.getHeight()); assertEquals(660, input.getHeight());
+
+        // QWERTY arrives after the switch: anchor, then show.
+        input.removeAllViews();
+        FrameLayout inputView = new FrameLayout(activity);
+        input.addView(inputView, new FrameLayout.LayoutParams(-1, -1));
+        keyboardRoot = new FrameLayout(activity);
+        keyboardRoot.setTag(ClipboardSearchWindowSlot.KEYBOARD_TAGS[0]);
+        inputView.addView(keyboardRoot, new FrameLayout.LayoutParams(-1, 300, android.view.Gravity.BOTTOM));
+        layout();
+        assertFalse("a moving frame is withheld", slot.onPreDraw());
+        assertEquals(0f, surface.getAlpha(), 0f);
+        layout();
+        assertTrue(slot.onPreDraw());
+        assertEquals(ClipboardSearchWindowSlot.Anchor.ANCHORED, slot.anchorState());
+        assertEquals(1f, surface.getAlpha(), 0f);
+        assertEquals(top(keyboardRoot), top(surface) + surface.getHeight());
+
         slot.close(); slot.close();
+        assertEquals(ClipboardSearchWindowSlot.Anchor.CLOSED, slot.anchorState());
         assertFalse(slot.anchorToKeyboard());
+        assertEquals(1f, surface.getAlpha(), 0f); // Detached surface is not left transparent.
     }
 }

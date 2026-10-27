@@ -140,17 +140,26 @@ public final class ClipboardNativeSearch1803 {
         if (endRequested) { end(); return false; }
         ClipboardSearchSurface shown = surface;
         if (shown == null) return false;
-        // Attachment alone is not visibility: after layout the surface must have real size.
+        // Attachment alone is not visibility: within this bound the surface must have real size
+        // and rest on the keyboard (the slot keeps it transparent until then). Never leave an
+        // unanchored search open; the device trace shows the switch completing in ~100 ms.
         shown.postDelayed(() -> {
-            if (surface == shown && (!shown.isShown() || shown.getHeight() == 0)) {
-                reportState("surface-not-visible; rolling-back");
+            if (surface == shown && !visible(shown)) {
+                reportState("surface-not-visible-or-unanchored; rolling-back");
                 // This is a failed open, not a window-close lifecycle event.
                 // Restore the complete slot and the native clipboard, not only routing.
                 session.cancel();
                 finish();
             }
-        }, 500);
+        }, ANCHOR_TIMEOUT_MS);
         return true;
+    }
+
+    static final long ANCHOR_TIMEOUT_MS = 1000;
+
+    /** Shown, sized and anchored (an unanchored surface is kept at alpha 0). */
+    private static boolean visible(View view) {
+        return view.isShown() && view.getHeight() > 0 && view.getAlpha() > 0f;
     }
 
     /** Input session ended or the window hid: restore provider and surface, keep the keyboard. */
@@ -205,7 +214,7 @@ public final class ClipboardNativeSearch1803 {
         try {
             if (!main() || !isOpen() || insets == null) return;
             ClipboardSearchSurface current = surface;
-            if (current == null || !current.isShown() || current.getHeight() == 0) return;
+            if (current == null || !visible(current)) return; // Unanchored: nothing to touch.
             int[] location = new int[2];
             current.getLocationInWindow(location);
             Rect rect = new Rect(location[0], location[1],
@@ -266,7 +275,8 @@ public final class ClipboardNativeSearch1803 {
                 int height = surface.getLayoutParams().height;
                 slot.attach(surface, height);
                 ime.setCandidatesViewShown(true);
-                return surface.getParent() != null && surface.isShown();
+                // The surface itself stays transparent until anchored; its slot must be shown.
+                return surface.getParent() instanceof View parent && parent.isShown();
             } catch (Throwable failure) {
                 hideSurface();
                 report("attach", failure);

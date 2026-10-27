@@ -201,6 +201,31 @@ public class ClipboardNativeSearch1803HostTest {
         assertEquals(List.of("surface", "alphabet", "route", "restore", "hide", "clipboard"), host.calls);
     }
 
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void searchThatNeverFindsTheKeyboardIsRolledBackInsteadOfLeftAtTheTop() throws Exception {
+        Service service = Robolectric.setupService(Service.class);
+        FakeHost host = new FakeHost();
+        assertTrue(ClipboardNativeSearch1803.start(service, new Field(service), List.of(), host));
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        java.lang.reflect.Field surfaceField = ClipboardNativeSearch1803.class.getDeclaredField("surface");
+        surfaceField.setAccessible(true);
+        View shown = (View) surfaceField.get(null);
+        activity.setContentView(shown);
+        shown.setAlpha(0f); // What the slot keeps while waiting for a keyboard root.
+        assertTrue(shown.isShown());
+        InputMethodService.Insets insets = new InputMethodService.Insets();
+        insets.touchableInsets = InputMethodService.Insets.TOUCHABLE_INSETS_REGION;
+        insets.touchableRegion.set(0, 900, 1080, 1600); insets.visibleTopInsets = 900;
+        ClipboardNativeSearch1803.beforeComputeInsets(insets);
+        ClipboardNativeSearch1803.afterComputeInsets();
+        assertEquals(new Rect(0, 900, 1080, 1600), insets.touchableRegion.getBounds()); // Not touchable.
+        assertEquals(900, insets.visibleTopInsets);
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+                .idleFor(java.time.Duration.ofMillis(ClipboardNativeSearch1803.ANCHOR_TIMEOUT_MS + 1));
+        assertFalse(ClipboardNativeSearch1803.isOpen());
+        assertEquals(List.of("surface", "alphabet", "route", "restore", "hide", "clipboard"), host.calls);
+    }
+
     @Test public void failedStartRestoresRoutingAndLeavesNoSurfaceOrSession() {
         Service service = Robolectric.setupService(Service.class);
         Field field = new Field(service);
@@ -231,7 +256,8 @@ public class ClipboardNativeSearch1803HostTest {
         View shown = (View) surfaceField.get(null);
         activity.setContentView(shown);
         shown.setVisibility(View.GONE);
-        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(501));
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+                .idleFor(java.time.Duration.ofMillis(ClipboardNativeSearch1803.ANCHOR_TIMEOUT_MS + 1));
         assertFalse(ClipboardNativeSearch1803.isOpen());
         assertEquals(List.of("surface", "alphabet", "route", "restore", "hide", "clipboard"), first.calls);
         FakeHost next = new FakeHost();

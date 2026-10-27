@@ -19,10 +19,18 @@ import java.util.List;
  * keyboard's top edge on every layout, and the space above it becomes the top margin.
  * inputArea then measures exactly to the keyboard, so slot and keyboard are adjacent rows
  * of the same IME layout. Nothing is offset by a fixed amount.
+ *
+ * <p>The surface is attached before the keyboard switch, so the first frames can precede
+ * any usable keyboard root. Until anchored it is transparent (alpha 0, not INVISIBLE: the
+ * search field must stay focusable for routing) and its rectangle is not touchable. It is
+ * never drawn at the unanchored window-top position; ClipboardNativeSearch1803's bounded
+ * watchdog rolls the open back if no anchor is ever found.
  */
 final class ClipboardSearchWindowSlot implements AutoCloseable {
     /** Gboard's keyboard root, as tagged by its theme engine (docked, then floating). */
     static final String[] KEYBOARD_TAGS = {".keyboard-base-area.keyboard-outline", ".keyboard-base-area"};
+
+    enum Anchor { WAITING_FOR_KEYBOARD, ANCHORED, CLOSED }
 
     private final ViewGroup area;
     private final View parent;
@@ -34,7 +42,8 @@ final class ClipboardSearchWindowSlot implements AutoCloseable {
     private WeakReference<View> keyboard = new WeakReference<>(null);
     private View owned;
     private int preferredHeight, settling;
-    private boolean closed;
+    private Anchor anchorState = Anchor.WAITING_FOR_KEYBOARD;
+    private boolean closed, placed;
 
     static ClipboardSearchWindowSlot resolve(InputMethodService ime) {
         if (ime.isFullscreenMode() || ime.getWindow() == null || ime.getWindow().getWindow() == null) return null;
@@ -66,6 +75,7 @@ final class ClipboardSearchWindowSlot implements AutoCloseable {
         preferredHeight = height;
         for (View view : original) area.removeView(view);
         // Do not use setCandidatesView: it overwrites height with WRAP_CONTENT.
+        surface.setAlpha(0f); // Nothing may be seen at the unanchored position.
         area.addView(surface, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height));
         parent.setVisibility(View.VISIBLE);
         area.setVisibility(View.VISIBLE);
@@ -74,12 +84,26 @@ final class ClipboardSearchWindowSlot implements AutoCloseable {
         observer.addOnPreDrawListener(anchor);
     }
 
-    /** A frame drawn before anchoring would flash the surface at the window top. */
-    private boolean onPreDraw() {
-        if (!anchorToKeyboard()) { settling = 0; return true; }
-        // The fixed point is reached in one pass when the keyboard is bottom- or top-aligned;
-        // never withhold more than a few frames for any other native arrangement.
-        return ++settling > 3;
+    Anchor anchorState() { return anchorState; }
+
+    /**
+     * Shows the surface only once a keyboard root was found and the surface rests on it.
+     * Frames while waiting are drawn (the surface is transparent there); frames that move
+     * the surface are withheld, at most a few in a row.
+     */
+    boolean onPreDraw() {
+        if (closed || owned == null) return true;
+        if (anchorToKeyboard()) {
+            // The fixed point is reached in one pass when the keyboard is bottom- or top-aligned;
+            // never withhold more than a few frames for any other native arrangement.
+            return ++settling > 3;
+        }
+        settling = 0;
+        if (anchorState == Anchor.WAITING_FOR_KEYBOARD && keyboard() != null && placed) {
+            anchorState = Anchor.ANCHORED;
+            owned.setAlpha(1f);
+        }
+        return true;
     }
 
     /**
@@ -87,6 +111,7 @@ final class ClipboardSearchWindowSlot implements AutoCloseable {
      * limiting its height to the space actually available. Returns true if it moved.
      */
     boolean anchorToKeyboard() {
+        placed = false;
         if (closed || owned == null || owned.getParent() != area || !area.isAttachedToWindow()) return false;
         View root = keyboard();
         if (root == null) return false;
@@ -96,13 +121,16 @@ final class ClipboardSearchWindowSlot implements AutoCloseable {
         area.getLocationInWindow(at);
         // The area's own top does not depend on the margin set below.
         int available = keyboardTop - at[1] - area.getPaddingTop();
-        if (available <= 0) return false; // Floating keyboard over the slot: keep the stock row.
+        if (available <= 0) return false; // Floating keyboard over the slot: never anchored.
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) owned.getLayoutParams();
         int height = Math.min(preferredHeight, available);
         int top = available - height;
         int left = Math.max(0, keyboardLeft - at[0] - area.getPaddingLeft());
         int width = root.getWidth() < area.getWidth() ? root.getWidth() : ViewGroup.LayoutParams.MATCH_PARENT;
-        if (lp.height == height && lp.topMargin == top && lp.leftMargin == left && lp.width == width) return false;
+        if (lp.height == height && lp.topMargin == top && lp.leftMargin == left && lp.width == width) {
+            placed = owned.getHeight() == height; // Laid out where computed, not only requested.
+            return false;
+        }
         lp.height = height; lp.topMargin = top; lp.leftMargin = left; lp.width = width;
         owned.setLayoutParams(lp);
         return true;
@@ -147,12 +175,14 @@ final class ClipboardSearchWindowSlot implements AutoCloseable {
     @Override public void close() {
         if (closed) return;
         closed = true;
+        anchorState = Anchor.CLOSED;
         if (observer != null) {
             if (observer.isAlive()) observer.removeOnPreDrawListener(anchor);
             else area.getViewTreeObserver().removeOnPreDrawListener(anchor);
             observer = null;
         }
         if (owned != null && owned.getParent() == area) area.removeView(owned);
+        if (owned != null) owned.setAlpha(1f);
         owned = null;
         // Preserve any unrelated views a native owner added in the meantime.
         for (int i = 0; i < original.size(); i++) {

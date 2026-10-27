@@ -109,4 +109,18 @@ public class ClipboardSearchStyleTest {
         bitmap.recycle();
         surface.close();
     }
+
+    @Test public void cardMeasurementIsReusedOnlyWhileTheNativeCardRendersTheSame() {
+        nativeClipboard();
+        ClipboardSearchStyle first = ClipboardSearchStyle.capture(list, null);
+        ClipboardSearchStyle again = ClipboardSearchStyle.capture(list, null);
+        assertEquals(first.cardColor, again.cardColor);
+        assertEquals(first.cardRadius, again.cardRadius, 0f);
+        assertEquals(first.cardGap, again.cardGap);
+        // Same drawable instance recolored by a theme change: must be measured again.
+        View card = ((android.view.ViewGroup) list.getChildAt(1)).getChildAt(0);
+        ((GradientDrawable) card.getBackground()).setColor(0xff8ab4f8);
+        ClipboardSearchStyle recolored = ClipboardSearchStyle.capture(list, null);
+        assertEquals(0xff8ab4f8, recolored.cardColor);
+    }
 }

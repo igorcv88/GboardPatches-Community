@@ -175,3 +175,48 @@ Gap closed at the actual keyboard height and orientation; appearance on the user
 with Frosted Glass; gray disc with visible lens; no row left after native return to the
 clipboard; repeated open/close/hide/reopen; top-row key previews (InputView now ends at
 the keyboard top while search is open, as it does with Frosted Glass's bounded surface).
+
+## Review follow-up to 9a7df57
+
+### Unanchored first frames
+
+anchorToKeyboard() returned false both when already placed and when no keyboard root
+existed yet, and onPreDraw() drew in both cases. The surface is attached before the
+keyboard switch, so the first frames could show it at the window top. The slot now has
+explicit states WAITING_FOR_KEYBOARD, ANCHORED and CLOSED. While waiting, the surface is
+transparent (alpha 0) and afterComputeInsets() adds no touchable rectangle for it.
+INVISIBLE is not used because routing focuses the search field right after the switch, and
+an invisible ancestor can refuse focus. The surface becomes opaque only once a keyboard
+root was found and the surface is laid out on it. The open watchdog
+(ANCHOR_TIMEOUT_MS = 1000; the device trace shows the switch in about 100 ms) now also
+requires anchoring. Otherwise it cancels search and returns to the clipboard.
+
+### Contrast evaluated on the composite
+
+ClipboardNativeSkin.contrasts() accepted any disc below alpha 0xb0, whatever its color:
+a faint white disc on a light header with a white lens passed. It is replaced by
+renderedContrast(): lens over disc over the header backdrop actually behind the action,
+composited from the live backgrounds of its ancestors. Whatever the backdrop leaves
+translucent (blurred or plain app content) is evaluated as both black and white, and the
+worse result counts. The threshold is WCAG SC 1.4.11 non-text contrast, 3:1. The native
+disc is kept when legible in place; otherwise an 11 % disc of the lens color, if legible;
+otherwise the least opaque neutral disc of the opposite tone that is. The surface's
+header controls apply the same rule against the captured panel color. Tests now also
+measure the lens against the disc in the drawn header, not only on a transparent bitmap.
+
+### Capture cost
+
+capture() runs on the IME thread at the tap and now logs its duration ("Clipboard search
+style captured in N us") so the device measures it. Card detection and sampling share one
+rendering. At most six rows are probed. The card measurement is reused while the same
+native drawable has the same state, alpha, size and center pixel, so a recolored instance
+is measured again.
+
+### Not changed, pending device validation
+
+The panel reproduces the backdrop's color and translucency, not Frosted Glass's
+window/RenderNode blur. Results remain a single-column list of native-styled cards, not
+the native grid with Pinned/Recent sections.
+
+Repository validation: 75 Robolectric executions (SDK 26 and 33) across slot, host,
+session, surface, style and search-action suites; 21 Python tooling tests.
