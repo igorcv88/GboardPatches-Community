@@ -18,8 +18,9 @@ import java.util.List;
  *
  * <p>Surface: the framework candidates area of the IME window
  * ({@link InputMethodService#setCandidatesView}), above Gboard's own input view; Loup
- * declares {@code onCreateCandidatesView()} returning null and the APK has no static
- * {@code setCandidatesView*} caller, so the area is otherwise unused.
+ * declares {@code onCreateCandidatesView()} returning null. Its INVISIBLE framework
+ * ancestor must be shown during search and restored afterward. The slot owns a bounded
+ * surface and restores the original children; it never leaves a measuring placeholder.
  * Field: Gboard's {@code EditTextOnKeyboard} (implements {@code Loqa}).
  * Routing: {@code Loup.Z(Loqa;Z)V} → {@code Loup.aC(provider, reset, true)} (0x2eeddc).
  * Restore: {@code Z(null, false)} ≡ {@code aC(null, false, true)}, the call Loup makes itself in
@@ -130,8 +131,11 @@ public final class ClipboardNativeSearch1803 {
         // Attachment alone is not visibility: after layout the surface must have real size.
         shown.postDelayed(() -> {
             if (surface == shown && (!shown.isShown() || shown.getHeight() == 0)) {
-                report("surface", new IllegalStateException("not visible"));
-                end();
+                reportState("surface-not-visible; rolling-back");
+                // This is a failed open, not a window-close lifecycle event.
+                // Restore the complete slot and the native clipboard, not only routing.
+                session.cancel();
+                finish();
             }
         }, 500);
         return true;
@@ -223,6 +227,7 @@ public final class ClipboardNativeSearch1803 {
         private final Object keyboard;
         private final View panelRoot;
         private Object returnAction, alphabetAction;
+        private ClipboardSearchWindowSlot slot;
         Host(InputMethodService ime, View field) { this(ime, field, null, null); }
         Host(InputMethodService ime, View field, Object keyboard, View panelRoot) {
             this.ime = ime; this.field = field; this.keyboard = keyboard; this.panelRoot = panelRoot;
@@ -230,16 +235,26 @@ public final class ClipboardNativeSearch1803 {
 
         @Override public boolean showSurface() {
             if (surface == null) return false;
-            ime.setCandidatesView(surface);
-            ime.setCandidatesViewShown(true);
-            // Real visibility is verified after layout in start().
-            return surface.getParent() != null;
+            slot = ClipboardSearchWindowSlot.resolve(ime);
+            if (slot == null) return false;
+            try {
+                int height = surface.getLayoutParams().height;
+                slot.attach(surface, height);
+                ime.setCandidatesViewShown(true);
+                return surface.getParent() != null && surface.isShown();
+            } catch (Throwable failure) {
+                hideSurface();
+                report("attach", failure);
+                return false;
+            }
         }
 
         @Override public void hideSurface() {
-            ime.setCandidatesViewShown(false);
-            // An empty placeholder: the candidates frame keeps no reference to the surface.
-            ime.setCandidatesView(new View(ime));
+            ClipboardSearchWindowSlot previous = slot;
+            slot = null;
+            if (previous == null) return;
+            try { ime.setCandidatesViewShown(previous.wasShown()); }
+            finally { previous.close(); }
         }
 
         /**

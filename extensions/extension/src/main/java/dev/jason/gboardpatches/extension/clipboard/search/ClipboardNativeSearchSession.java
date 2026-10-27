@@ -39,8 +39,9 @@ public final class ClipboardNativeSearchSession {
     public boolean open() {
         if (state == State.OPEN) return true;
         try {
-            surface = host.showSurface();
-            if (!surface) return rollback();
+            // showSurface may attach before returning false/throwing; always undo the attempt.
+            surface = true;
+            if (!host.showSurface()) return rollback();
             alphabet = host.switchToAlphabet();
             if (!alphabet) return rollback();
             // A failed or throwing route may already have switched the provider (Loup.aC calls

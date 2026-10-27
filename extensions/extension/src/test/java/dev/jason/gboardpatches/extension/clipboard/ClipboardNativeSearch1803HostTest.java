@@ -195,4 +195,17 @@ public class ClipboardNativeSearch1803HostTest {
         assertFalse(host.restoreRouting());
     }
 
+    @Test public void failedVisibilityCheckRollsBackToClipboardAndDoesNotPoisonTheNextSession() {
+        Service service = Robolectric.setupService(Service.class);
+        FakeHost first = new FakeHost();
+        assertTrue(ClipboardNativeSearch1803.start(service, new Field(service), List.of(), first));
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(501));
+        assertFalse(ClipboardNativeSearch1803.isOpen());
+        assertEquals(List.of("surface", "alphabet", "route", "restore", "hide", "clipboard"), first.calls);
+        FakeHost next = new FakeHost();
+        assertTrue(ClipboardNativeSearch1803.start(service, new Field(service), List.of(), next));
+        ClipboardNativeSearch1803.end();
+        assertEquals(List.of("surface", "alphabet", "route", "restore", "hide"), next.calls);
+    }
+
 }
