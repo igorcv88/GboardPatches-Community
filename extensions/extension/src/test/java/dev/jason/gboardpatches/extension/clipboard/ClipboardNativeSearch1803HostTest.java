@@ -173,6 +173,20 @@ public class ClipboardNativeSearch1803HostTest {
         public boolean commitToEditor(String text) { calls.add("commit"); return true; }
     }
 
+    @Test public void arrowCallbackRestoresRoutingAndReturnsToTheNativeClipboard() throws Exception {
+        Service service = Robolectric.setupService(Service.class);
+        FakeHost host = new FakeHost();
+        assertTrue(ClipboardNativeSearch1803.start(service, new Field(service), List.of(), host));
+        java.lang.reflect.Field member = ClipboardNativeSearch1803.class.getDeclaredField("surface");
+        member.setAccessible(true);
+        ClipboardSearchSurface panel = (ClipboardSearchSurface) member.get(null);
+        panel.close.performClick();
+        assertFalse(ClipboardNativeSearch1803.isOpen());
+        assertEquals(List.of("surface", "alphabet", "route", "restore", "hide", "clipboard"), host.calls);
+        panel.close.performClick();
+        assertEquals(6, host.calls.size()); // Detached arrow cannot return a second time.
+    }
+
     @Test public void firstBackClosesOnlyTheSearchAndReturnsToTheClipboard() {
         Service service = Robolectric.setupService(Service.class);
         FakeHost host = new FakeHost();

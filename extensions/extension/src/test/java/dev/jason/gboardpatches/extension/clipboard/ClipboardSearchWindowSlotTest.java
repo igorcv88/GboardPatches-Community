@@ -113,6 +113,7 @@ public class ClipboardSearchWindowSlotTest {
         assertEquals(600, top(keyboardRoot));
         settle(slot);
         assertTrue(slot.onPreDraw());
+        assertTrue("anchoring requests another layout/insets traversal", surface.getRootView().isLayoutRequested());
         assertEquals(ClipboardSearchWindowSlot.Anchor.ANCHORED, slot.anchorState());
         assertEquals(1f, surface.getAlpha(), 0f);
         assertEquals(240, surface.getHeight());
@@ -175,6 +176,7 @@ public class ClipboardSearchWindowSlotTest {
         assertEquals(0f, surface.getAlpha(), 0f);
         layout();
         assertTrue(slot.onPreDraw());
+        assertTrue("anchoring requests another layout/insets traversal", surface.getRootView().isLayoutRequested());
         assertEquals(ClipboardSearchWindowSlot.Anchor.ANCHORED, slot.anchorState());
         assertEquals(1f, surface.getAlpha(), 0f);
         assertEquals(top(keyboardRoot), top(surface) + surface.getHeight());
