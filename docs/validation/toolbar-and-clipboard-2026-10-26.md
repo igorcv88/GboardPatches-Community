@@ -99,3 +99,30 @@ New regressions simulate a native parent swallowing child clicks, vector/alignme
 cancelled gestures, actual row hiding after repeated history actions, drawing refusal,
 clipboard ownership, and an application Context separate from the bound service.
 CI, transformation of the original APK and physical validation are separate checks.
+
+## Device feedback on review.11 — search viewport and circular action
+
+On 27 October the user provided 83319.png: search is adjacent to the native actions,
+but remains inactive and lacks their gray circular background. The smaller native
+glyph sits centered inside that circle; the previous code copied only the outer
+SoftKeyView background, which may be transparent.
+
+The original APK's InputView.dispatchTouchEvent has seven registers and invokes
+Ljqy.e(View, MotionEvent) before FrameLayout.dispatchTouchEvent. That interceptor
+can return true without dispatching to a SoftKeyboardView. The search hook now runs
+at InputView entry, before that branch. Hit testing uses local viewport coordinates
+and window-relative origins, without combining raw screen positions with a
+root-relative visible rectangle. Tests include a translated viewport and a parent
+that consumes events without dispatching to child keyboard views.
+
+The search lens is 20 dp, centered in peer-sized bounds. Background discovery walks
+the native action's internal content and clones its visible background with the
+same insets. A transparent/pure press ripple is not mistaken for the gray circle;
+a theme-colored circular fallback remains visible if no clonable background exists.
+Press, drag/cancel and a single completed gesture keep their previous isolation.
+No toolbar ownership, history, pinned-order or Termux candidate behavior is changed
+by this revision. Fixed touch/open stage names contain no clipboard/query text.
+
+The new screenshot validates positioning and pinned-before-recent presentation,
+not successful search opening. CI and APK reconstruction remain separate from the
+required physical retest of the updated search action.

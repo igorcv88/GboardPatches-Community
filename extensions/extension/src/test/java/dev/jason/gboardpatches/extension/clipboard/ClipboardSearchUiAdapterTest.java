@@ -64,9 +64,10 @@ public class ClipboardSearchUiAdapterTest {
         return ui;
     }
     private void event(int action, boolean inside) {
-        int[] location = new int[2]; root.ui.search.getLocationOnScreen(location);
-        float x = inside ? location[0] + root.ui.search.getWidth() / 2f : location[0] - 20;
-        float y = location[1] + root.ui.search.getHeight() / 2f;
+        int[] location = new int[2], source = new int[2];
+        root.ui.search.getLocationInWindow(location); root.getLocationInWindow(source);
+        float x = inside ? location[0] - source[0] + root.ui.search.getWidth() / 2f : location[0] - source[0] - 20;
+        float y = location[1] - source[1] + root.ui.search.getHeight() / 2f;
         android.view.MotionEvent event = android.view.MotionEvent.obtain(0, 1, action, x, y, 0);
         root.dispatchTouchEvent(event); event.recycle();
     }
@@ -109,6 +110,60 @@ public class ClipboardSearchUiAdapterTest {
         ui.alignToPeers();
         android.graphics.Paint paint = org.robolectric.util.ReflectionHelpers.getField(ui.search.getDrawable(), "paint");
         assertEquals(android.graphics.Color.CYAN, paint.getColor());
+        ui.close();
+    }
+
+    @Test public void viewportCoordinatesWorkWhenTheKeyboardIsTranslatedAwayFromScreenOrigin() {
+        ClipboardSearchUiAdapter ui = fixture(); root.bridge = true;
+        root.layout(30, 170, 430, 370);
+        event(android.view.MotionEvent.ACTION_DOWN, true); event(android.view.MotionEvent.ACTION_UP, true);
+        assertEquals(1, picks);
+        ui.close();
+    }
+
+    @Test public void aNativeCircleOnTheInnerContentIsCopiedWithItsInsetsAndASmallerLens() {
+        ClipboardSearchUiAdapter ui = fixture();
+        actions.removeView(peer);
+        android.widget.FrameLayout nativeKey = new android.widget.FrameLayout(actions.getContext());
+        View circleView = new View(actions.getContext()); nativeKey.addView(circleView);
+        android.graphics.drawable.GradientDrawable nativeCircle = new android.graphics.drawable.GradientDrawable();
+        nativeCircle.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        nativeCircle.setColor(0xff596166); circleView.setBackground(nativeCircle);
+        actions.addView(nativeKey); nativeKey.layout(100, 0, 148, 48); circleView.layout(3, 3, 45, 45);
+        ui.alignToPeers();
+        assertNotNull(ui.search.getBackground());
+        android.graphics.drawable.InsetDrawable background = (android.graphics.drawable.InsetDrawable) ui.search.getBackground();
+        assertTrue(background.getDrawable() instanceof android.graphics.drawable.GradientDrawable);
+        android.graphics.drawable.GradientDrawable copied = (android.graphics.drawable.GradientDrawable) background.getDrawable();
+        assertEquals(nativeCircle.getColor(), copied.getColor());
+        assertNotSame(nativeCircle, copied);
+        int expectedSize = Math.round(20 * actions.getResources().getDisplayMetrics().density);
+        assertEquals(expectedSize, ui.search.getDrawable().getIntrinsicWidth());
+        background.setBounds(0, 0, 48, 48);
+        assertEquals(new android.graphics.Rect(3, 3, 45, 45), copied.getBounds());
+        ui.close();
+    }
+
+    @Test public void aTransparentNativeRippleDoesNotLeaveTheSearchActionWithoutACircle() {
+        ClipboardSearchUiAdapter ui = fixture();
+        peer.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE), null, null));
+        ui.alignToPeers();
+        android.graphics.drawable.InsetDrawable background = (android.graphics.drawable.InsetDrawable) ui.search.getBackground();
+        assertTrue(background.getDrawable() instanceof android.graphics.drawable.GradientDrawable);
+        assertTrue(android.graphics.Color.alpha(((android.graphics.drawable.GradientDrawable) background.getDrawable()).getColor().getDefaultColor()) > 0);
+        ui.close();
+    }
+
+    @Test public void aWideTouchTargetStillHasACircularBackgroundAndACenteredGlyph() {
+        ClipboardSearchUiAdapter ui = fixture();
+        peer.layout(100, 0, 172, 48); ui.alignToPeers();
+        android.graphics.drawable.InsetDrawable background = (android.graphics.drawable.InsetDrawable) ui.search.getBackground();
+        background.setBounds(0, 0, 72, 48);
+        android.graphics.Rect circle = background.getDrawable().getBounds();
+        assertEquals(circle.width(), circle.height());
+        assertEquals(36, circle.centerX()); assertEquals(24, circle.centerY());
+        assertEquals(12, ui.search.getPaddingLeft()); assertEquals(12, ui.search.getPaddingRight());
         ui.close();
     }
 

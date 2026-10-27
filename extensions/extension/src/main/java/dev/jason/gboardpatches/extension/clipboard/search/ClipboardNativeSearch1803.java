@@ -61,6 +61,7 @@ public final class ClipboardNativeSearch1803 {
     /** Called from the clipboard header search button with the current text snapshot. */
     public static boolean open(Object keyboard, View anchor, List<ClipboardSearchSurface.Clip> clips) {
         if (!main() || !available() || active != null) return false;
+        reportState("open-requested");
         InputMethodService ime = service(anchor.getContext());
         if (ime == null) { reportState("missing-service"); return false; }
         try {
@@ -325,7 +326,7 @@ public final class ClipboardNativeSearch1803 {
     private static boolean main() { return Looper.myLooper() == Looper.getMainLooper(); }
 
     private static void reportState(String state) {
-        android.util.Log.w("GboardPatches", "Clipboard native search r9: " + state);
+        android.util.Log.w("GboardPatches", "Clipboard native search r12: " + state);
     }
 
     private static void report(String operation, Throwable failure) {

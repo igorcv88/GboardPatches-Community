@@ -16,8 +16,8 @@ KEYBOARD = 'Lcom/google/android/apps/inputmethod/libs/clipboard/ClipboardKeyboar
 METHODS = {
     'Leso;': {('b', '(Ljava/util/List;Lojt;Z)V'): 12},
     'Loup;': {('onStartInputView', '(Landroid/view/inputmethod/EditorInfo;Z)V'): 24},
-    'Lcom/google/android/libraries/inputmethod/widgets/SoftKeyboardView;': {
-        ('dispatchTouchEvent', '(Landroid/view/MotionEvent;)Z'): 6},
+    'Lcom/google/android/libraries/inputmethod/inputview/InputView;': {
+        ('dispatchTouchEvent', '(Landroid/view/MotionEvent;)Z'): 7},
     'Lmln;': {('m', '(Lnur;)Z'): 14},
     'Lmlh;': {('M', '(Landroid/view/View;)V'): 3},
     'Lfjk;': {('p', '(Lkr;I)V'): 16, ('gT', '(I)I'): 2,
@@ -61,6 +61,12 @@ def main(path):
             ('Lfjf;', 'm', '(Lkr;)V', 1)]:
         refs = [i.get_output() for i in found[owner, name, signature].get_instructions()]
         assert sum('Lkr;->b()I' in ref for ref in refs) == count, owner
+    dispatch = found['Lcom/google/android/libraries/inputmethod/inputview/InputView;',
+                     'dispatchTouchEvent', '(Landroid/view/MotionEvent;)Z']
+    refs = [i.get_output() for i in dispatch.get_instructions()]
+    interceptor = next(i for i, ref in enumerate(refs) if 'Ljqy;->e(Landroid/view/View;' in ref)
+    children = next(i for i, ref in enumerate(refs) if 'FrameLayout;->dispatchTouchEvent' in ref)
+    assert interceptor < children, 'Expected the native interceptor before child dispatch'
     fields = {(f.get_name(), f.get_descriptor()) for f in classes['Lmlh;'].get_fields()}
     assert ('h', 'Lays;') in fields
     for name, signature in [('ao', '(Landroid/util/SparseArray;Z)V')]:

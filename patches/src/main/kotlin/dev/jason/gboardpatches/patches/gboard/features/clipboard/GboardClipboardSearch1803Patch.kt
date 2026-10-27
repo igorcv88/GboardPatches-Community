@@ -21,11 +21,12 @@ internal val gboardClipboardSearch1803Patch = bytecodePatch(
         findMutableMethodOrThrow(INPUT_METHOD_SERVICE_OWNER, "onStartInputView", "V",
             listOf("Landroid/view/inputmethod/EditorInfo;", "Z"))
             .applyVoidExitLifecycleDelegate(RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_INPUT_STARTED, "p0 .. p0")
-        // Ordinary child click listeners are bypassed by the native key touch graph.
-        val touch = findMutableMethodOrThrow("Lcom/google/android/libraries/inputmethod/widgets/SoftKeyboardView;",
+        // InputView's Ljqy interceptor can consume the event before any SoftKeyboardView.
+        // Handle the search gesture before that interceptor, in the input viewport coordinates.
+        val touch = findMutableMethodOrThrow("Lcom/google/android/libraries/inputmethod/inputview/InputView;",
             "dispatchTouchEvent", "Z", listOf("Landroid/view/MotionEvent;"))
         val touchCall = RuntimeCallId.CLIPBOARD_SEARCH_TOUCH
-        check(touch.implementation!!.registerCount == 6) { "Unreviewed keyboard touch registers" }
+        check(touch.implementation!!.registerCount == 7) { "Unreviewed keyboard touch registers" }
         if (touch.implementation!!.instructions.none { it.isMethodReference(touchCall.encodedAbi) }) {
             touch.addInstructions(0, """
                 ${RuntimeCallEmitter.invoke(touchCall, "p0 .. p1")}
