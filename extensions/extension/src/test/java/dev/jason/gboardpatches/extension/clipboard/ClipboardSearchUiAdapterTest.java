@@ -124,7 +124,13 @@ public class ClipboardSearchUiAdapterTest {
         ui.close();
     }
 
-    @Test public void aNativeCircleOnTheInnerContentIsCopiedWithItsInsetsAndASmallerLens() {
+    private static int disc(ClipboardSearchUiAdapter ui) {
+        android.graphics.drawable.InsetDrawable background = (android.graphics.drawable.InsetDrawable) ui.search.getBackground();
+        return ((android.graphics.drawable.GradientDrawable) background.getDrawable()).getColor().getDefaultColor();
+    }
+
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void aNativeCircleOnTheInnerContentIsReproducedWithItsInsetsAndRenderedColor() {
         ClipboardSearchUiAdapter ui = fixture();
         actions.removeView(peer);
         android.widget.FrameLayout nativeKey = new android.widget.FrameLayout(actions.getContext());
@@ -134,16 +140,81 @@ public class ClipboardSearchUiAdapterTest {
         nativeCircle.setColor(0xff596166); circleView.setBackground(nativeCircle);
         actions.addView(nativeKey); nativeKey.layout(100, 0, 148, 48); circleView.layout(3, 3, 45, 45);
         ui.alignToPeers();
-        assertNotNull(ui.search.getBackground());
         android.graphics.drawable.InsetDrawable background = (android.graphics.drawable.InsetDrawable) ui.search.getBackground();
-        assertTrue(background.getDrawable() instanceof android.graphics.drawable.GradientDrawable);
-        android.graphics.drawable.GradientDrawable copied = (android.graphics.drawable.GradientDrawable) background.getDrawable();
-        assertEquals(nativeCircle.getColor(), copied.getColor());
-        assertNotSame(nativeCircle, copied);
+        assertEquals(0xff596166, disc(ui));
+        assertNotSame(nativeCircle, background.getDrawable());
         int expectedSize = Math.round(20 * actions.getResources().getDisplayMetrics().density);
         assertEquals(expectedSize, ui.search.getDrawable().getIntrinsicWidth());
         background.setBounds(0, 0, 48, 48);
-        assertEquals(new android.graphics.Rect(3, 3, 45, 45), copied.getBounds());
+        assertEquals(new android.graphics.Rect(3, 3, 45, 45), background.getDrawable().getBounds());
+        ui.close();
+    }
+
+    /** The persistent white disc: gray only in a state the native key has and the search button lacks. */
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void stateDependentNativeTintIsReadInTheKeysOwnStateNotTheSearchButtons() {
+        ClipboardSearchUiAdapter ui = fixture();
+        android.widget.ImageView edit = new android.widget.ImageView(actions.getContext());
+        edit.setId(0x7f0b0526);
+        android.graphics.drawable.GradientDrawable circle = new android.graphics.drawable.GradientDrawable();
+        circle.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        circle.setColor(android.graphics.Color.WHITE); // Untinted native asset is white.
+        edit.setBackground(circle);
+        edit.setBackgroundTintList(new android.content.res.ColorStateList(
+                new int[][]{{android.R.attr.state_activated}, {}}, new int[]{0x665f6368, android.graphics.Color.WHITE}));
+        edit.setActivated(true);
+        edit.setImageTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE));
+        actions.addView(edit); edit.layout(160, 0, 208, 48);
+        ui.alignToPeers();
+        assertFalse(ui.search.isActivated());
+        int color = disc(ui); // Premultiplied storage rounds translucent channels slightly.
+        assertEquals(0x66, android.graphics.Color.alpha(color));
+        assertEquals(0x5f, android.graphics.Color.red(color), 3);
+        assertEquals(0x63, android.graphics.Color.green(color), 3);
+        assertEquals(0x68, android.graphics.Color.blue(color), 3);
+        ui.close();
+    }
+
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void anOpaqueDiscTheLensCannotBeSeenOnIsNeverAccepted() {
+        ClipboardSearchUiAdapter ui = fixture();
+        android.widget.ImageView edit = new android.widget.ImageView(actions.getContext());
+        edit.setId(0x7f0b0526);
+        android.graphics.drawable.GradientDrawable circle = new android.graphics.drawable.GradientDrawable();
+        circle.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        circle.setColor(android.graphics.Color.WHITE);
+        edit.setBackground(circle);
+        edit.setImageTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE));
+        actions.addView(edit); edit.layout(160, 0, 208, 48);
+        ui.alignToPeers();
+        assertEquals(0x1cffffff, disc(ui));
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888);
+        ui.search.draw(new android.graphics.Canvas(bitmap));
+        int lens = 0;
+        for (int y = 0; y < 48; y++) for (int x = 0; x < 48; x++) {
+            int pixel = bitmap.getPixel(x, y);
+            if (android.graphics.Color.alpha(pixel) > 200 && android.graphics.Color.red(pixel) > 230) lens++;
+        }
+        assertTrue("lens is drawn above the disc", lens > 5);
+        assertTrue(android.graphics.Color.alpha(bitmap.getPixel(4, 24)) < 0x40);
+        bitmap.recycle(); ui.close();
+    }
+
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void lensIsSizedAndColoredLikeTheRenderedNativeGlyph() {
+        ClipboardSearchUiAdapter ui = fixture();
+        android.widget.ImageView edit = new android.widget.ImageView(actions.getContext());
+        edit.setId(0x7f0b0526);
+        android.graphics.drawable.ShapeDrawable glyph = new android.graphics.drawable.ShapeDrawable();
+        glyph.setIntrinsicWidth(30); glyph.setIntrinsicHeight(30);
+        glyph.getPaint().setColor(android.graphics.Color.BLACK);
+        edit.setImageDrawable(glyph);
+        edit.setColorFilter(0xffe8eaed); // Vector/filter tint is only visible when rendered.
+        edit.setScaleType(android.widget.ImageView.ScaleType.CENTER);
+        actions.addView(edit); edit.layout(160, 0, 208, 48);
+        ui.alignToPeers();
+        assertEquals(30, ui.search.getDrawable().getIntrinsicWidth());
+        assertEquals(0xffe8eaed, ((ClipboardSearchUiAdapter.SearchIcon) ui.search.getDrawable()).foreground());
         ui.close();
     }
 
@@ -200,7 +271,6 @@ public class ClipboardSearchUiAdapterTest {
         ui.alignToPeers();
         assertNull(ui.search.getBackgroundTintList()); assertNull(ui.search.getImageTintList());
         assertEquals(android.graphics.Color.WHITE, ((ClipboardSearchUiAdapter.SearchIcon)ui.search.getDrawable()).foreground());
-        assertTrue(ui.search.getForeground() instanceof android.graphics.drawable.RippleDrawable);
         assertNotSame(edit.getForeground(), ui.search.getForeground());
         android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888);
         ui.search.getBackground().setBounds(0, 0, 48, 48);
@@ -231,7 +301,6 @@ public class ClipboardSearchUiAdapterTest {
         highlight.setAlpha(0); edit.setForeground(highlight);
         edit.setImageTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE));
         actions.addView(edit); edit.layout(160, 0, 208, 48); ui.alignToPeers();
-        assertEquals(0, ui.search.getForeground().getAlpha());
         android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888);
         ui.search.draw(new android.graphics.Canvas(bitmap));
         int centerAlpha = android.graphics.Color.alpha(bitmap.getPixel(24, 24));
@@ -242,6 +311,11 @@ public class ClipboardSearchUiAdapterTest {
             if (android.graphics.Color.alpha(pixel) > 200 && android.graphics.Color.red(pixel) > 230) lens++;
         }
         assertTrue("white lens is visible above the native backdrop", lens > 5);
+        ui.search.setPressed(true);
+        bitmap.eraseColor(android.graphics.Color.TRANSPARENT);
+        ui.search.draw(new android.graphics.Canvas(bitmap));
+        assertTrue("press feedback darkens/lightens only the disc", android.graphics.Color.alpha(bitmap.getPixel(24, 6)) > centerAlpha);
+        ui.search.setPressed(false);
         assertEquals(0, highlight.getAlpha()); assertEquals(102, background.getAlpha()); // Native controls untouched.
         bitmap.recycle(); ui.close();
     }

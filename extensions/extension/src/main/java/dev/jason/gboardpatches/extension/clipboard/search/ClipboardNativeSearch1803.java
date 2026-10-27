@@ -74,6 +74,12 @@ public final class ClipboardNativeSearch1803 {
 
     /** Called from the clipboard header search button with the current text snapshot. */
     public static boolean open(Object keyboard, View anchor, List<ClipboardSearchSurface.Clip> clips) {
+        return open(keyboard, anchor, clips, null);
+    }
+
+    /** style: the native clipboard's appearance, captured while it is still on screen. */
+    static boolean open(Object keyboard, View anchor, List<ClipboardSearchSurface.Clip> clips,
+            ClipboardSearchStyle style) {
         if (!main() || !available() || active != null) return false;
         reportState("open-requested");
         InputMethodService ime = service(anchor.getContext());
@@ -96,7 +102,8 @@ public final class ClipboardNativeSearch1803 {
             Host host = new Host(ime, (View) field, keyboard, anchor.getRootView());
             host.returnAction = returnAction;
             host.alphabetAction = alphabetAction;
-            return start(ime, (View) field, clips, host);
+            return start(ime, (View) field, clips, host,
+                    style != null ? style : ClipboardSearchStyle.fallback(anchor.getContext()));
         } catch (Throwable failure) {
             report("open", failure);
             return false;
@@ -105,6 +112,11 @@ public final class ClipboardNativeSearch1803 {
 
     static boolean start(InputMethodService ime, View field, List<ClipboardSearchSurface.Clip> clips,
             ClipboardNativeSearchSession.Host host) {
+        return start(ime, field, clips, host, ClipboardSearchStyle.fallback(field.getContext()));
+    }
+
+    static boolean start(InputMethodService ime, View field, List<ClipboardSearchSurface.Clip> clips,
+            ClipboardNativeSearchSession.Host host, ClipboardSearchStyle style) {
         ClipboardNativeSearchSession session = new ClipboardNativeSearchSession(host);
         int height = Math.min(Math.round(ime.getResources().getDisplayMetrics().heightPixels * 0.30f),
                 Math.round(240 * ime.getResources().getDisplayMetrics().density));
@@ -113,7 +125,7 @@ public final class ClipboardNativeSearch1803 {
                     public void onPick(ClipboardSearchSurface.Clip clip) { session.pick(clip.text); finish(); }
                     public void onClose() { session.cancel(); finish(); }
                     public void onDelete(ClipboardSearchSurface.Clip clip) { delete(ime, clip); }
-                });
+                }, style);
         surface.setDeleteEnabled(DELETE_REVIEWED);
         surface.setClips(clips);
         active = session;
@@ -149,6 +161,19 @@ public final class ClipboardNativeSearch1803 {
         if (session == null) return;
         session.end();
         finish();
+    }
+
+    /**
+     * ClipboardKeyboard.e(): the native clipboard is active again while search is open, so
+     * it was reached by a native path (toolbar, keyboard switch) rather than Back or the
+     * search's own back button. Leave search there: provider and slot are restored, no
+     * keyboard switch is issued and no search row stays above the clipboard. Ignored while
+     * opening, where only the reviewed rollback may decide.
+     */
+    public static void clipboardShown() {
+        if (!main() || opening || !isOpen()) return;
+        reportState("clipboard-returned; ending");
+        end();
     }
 
     /**

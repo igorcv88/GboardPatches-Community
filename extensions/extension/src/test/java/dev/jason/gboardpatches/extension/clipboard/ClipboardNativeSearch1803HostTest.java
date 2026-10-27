@@ -126,7 +126,7 @@ public class ClipboardNativeSearch1803HostTest {
     }
 
     /** Succeeds every step; records calls. Optionally ends the session from inside the switch. */
-    static final class FakeHost implements ClipboardNativeSearchSession.Host {
+    static class FakeHost implements ClipboardNativeSearchSession.Host {
         final List<String> calls = new ArrayList<>();
         boolean endDuringSwitch;
         public boolean showSurface() { calls.add("surface"); return true; }
@@ -175,6 +175,30 @@ public class ClipboardNativeSearch1803HostTest {
         ClipboardNativeSearch1803.end();
         assertFalse(ClipboardNativeSearch1803.isOpen());
         assertEquals(List.of("surface", "alphabet", "route", "restore", "hide"), host.calls);
+    }
+
+    @Test public void nativeReturnToTheClipboardEndsSearchWithoutLeavingTheRowOrSwitchingAgain() {
+        Service service = Robolectric.setupService(Service.class);
+        FakeHost host = new FakeHost();
+        assertTrue(ClipboardNativeSearch1803.start(service, new Field(service), List.of(), host));
+        // ClipboardKeyboard.e() while search is open: the toolbar/native path brought it back.
+        ClipboardNativeSearch1803.clipboardShown();
+        assertFalse(ClipboardNativeSearch1803.isOpen());
+        assertEquals(List.of("surface", "alphabet", "route", "restore", "hide"), host.calls);
+        ClipboardNativeSearch1803.clipboardShown(); // Idempotent, inert without a session.
+        assertEquals(5, host.calls.size());
+    }
+
+    @Test public void ourOwnReturnToTheClipboardDoesNotReenterTheClose() {
+        Service service = Robolectric.setupService(Service.class);
+        FakeHost host = new FakeHost() {
+            @Override public void returnToClipboard() { super.returnToClipboard(); ClipboardNativeSearch1803.clipboardShown(); }
+        };
+        assertTrue(ClipboardNativeSearch1803.start(service, new Field(service), List.of(), host));
+        assertTrue(ClipboardNativeSearch1803.onBackKey(KeyEvent.KEYCODE_BACK,
+                new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK)));
+        assertFalse(ClipboardNativeSearch1803.isOpen());
+        assertEquals(List.of("surface", "alphabet", "route", "restore", "hide", "clipboard"), host.calls);
     }
 
     @Test public void failedStartRestoresRoutingAndLeavesNoSurfaceOrSession() {
