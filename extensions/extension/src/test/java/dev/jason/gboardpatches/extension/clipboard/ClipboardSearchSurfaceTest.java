@@ -69,7 +69,9 @@ public class ClipboardSearchSurfaceTest {
     }
 
     @Test public void dispatchedFingerGesturesPickScrollAndCloseWithoutPhantomClicks() {
-        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        org.robolectric.android.controller.ActivityController<Activity> controller =
+                Robolectric.buildActivity(Activity.class).setup().visible();
+        Activity activity = controller.get();
         List<ClipboardSearchSurface.Clip> picked = new ArrayList<>();
         int[] closes = {0};
         ClipboardSearchSurface surface = new ClipboardSearchSurface(activity, new EditText(activity), 400,
@@ -84,6 +86,9 @@ public class ClipboardSearchSurfaceTest {
         surface.measure(View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY));
         surface.layout(0, 0, 600, 400);
+        // AbsListView.WindowRunnable rejects clicks when the test window lacks focus.
+        controller.windowFocusChanged(true);
+        assertTrue(surface.hasWindowFocus());
         View row = surface.results.getChildAt(0);
         assertNotNull(row);
         float x = 300, y = surface.results.getTop() + row.getTop() + row.getHeight() / 2f;
