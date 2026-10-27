@@ -104,10 +104,17 @@ public class ClipboardSearchSurfaceTest {
         int downPosition = org.robolectric.util.ReflectionHelpers.getField(surface.results, "mMotionPosition");
         int downMode = org.robolectric.util.ReflectionHelpers.getField(surface.results, "mTouchMode");
         touch(surface, 0, 50, 1, x, y);
+        int upMode = org.robolectric.util.ReflectionHelpers.getField(surface.results, "mTouchMode");
+        boolean changed = org.robolectric.util.ReflectionHelpers.getField(surface.results, "mDataChanged");
+        Object click = org.robolectric.util.ReflectionHelpers.getField(surface.results, "mPerformClick");
         // AbsListView delays PerformClick by the framework pressed-state duration.
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100));
         assertEquals("position=" + downPosition + " mode=" + downMode
-                + " focused=" + surface.hasWindowFocus() + " touch=" + surface.isInTouchMode(),
+                + " focused=" + surface.hasWindowFocus() + " touch=" + surface.isInTouchMode()
+                + " upMode=" + upMode + " changed=" + changed + " click=" + (click != null)
+                + " rowFocusable=" + row.hasExplicitFocusable() + " rowClickable=" + row.isClickable()
+                + " rowLongClickable=" + row.isLongClickable() + " listWidth=" + surface.results.getWidth()
+                + " x=" + x + " y=" + y + " pressedDuration=" + android.view.ViewConfiguration.getPressedStateDuration(),
                 List.of(clips.get(0)), picked);
         int before = surface.results.getChildAt(0).getTop();
         float bottom = surface.results.getBottom() - 20;
