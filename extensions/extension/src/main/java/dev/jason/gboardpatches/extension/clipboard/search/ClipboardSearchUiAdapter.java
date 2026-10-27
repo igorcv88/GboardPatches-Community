@@ -234,6 +234,8 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
     static final class SearchIcon extends Drawable {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final int size;
+        private ColorFilter sampledFilter;
+        private int sampledBase, sampledColor;
         SearchIcon(int color, int size) {
             this.size = size; paint.setColor(color); paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeCap(Paint.Cap.ROUND); paint.setStrokeJoin(Paint.Join.ROUND);
@@ -245,7 +247,19 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
         }
         int foreground() {
             ColorFilter filter = paint.getColorFilter();
-            return filter instanceof android.graphics.PorterDuffColorFilter tint ? tint.getColor() : paint.getColor();
+            if (filter == null) return paint.getColor();
+            if (filter == sampledFilter && sampledBase == paint.getColor()) return sampledColor;
+            // ColorFilter exposes no public color getter. Sample its rendered result using
+            // public graphics APIs; do not depend on hidden PorterDuff implementation fields.
+            android.graphics.Bitmap pixel = android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888);
+            try {
+                Paint fill = new Paint(paint); fill.setStyle(Paint.Style.FILL);
+                new Canvas(pixel).drawRect(0, 0, 1, 1, fill);
+                int color = pixel.getPixel(0, 0);
+                sampledFilter = filter; sampledBase = paint.getColor();
+                sampledColor = Color.alpha(color) > 0 ? color : paint.getColor();
+                return sampledColor;
+            } finally { pixel.recycle(); }
         }
         public int getIntrinsicWidth() { return size; }
         public int getIntrinsicHeight() { return size; }

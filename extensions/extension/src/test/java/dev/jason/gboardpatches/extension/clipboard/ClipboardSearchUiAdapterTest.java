@@ -170,7 +170,8 @@ public class ClipboardSearchUiAdapterTest {
         ui.close();
     }
 
-    @Test public void fallbackCircleUsesTheActualNativeGlyphTintInsteadOfTheApplicationTheme() {
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void fallbackCircleUsesTheActualNativeGlyphTintInsteadOfTheApplicationTheme() {
         ClipboardSearchUiAdapter ui = fixture();
         actions.removeView(peer);
         android.widget.ImageView icon = new android.widget.ImageView(actions.getContext());
