@@ -89,7 +89,7 @@ public class ClipboardSearchSurfaceTest {
         Object viewRoot = org.robolectric.util.ReflectionHelpers.callInstanceMethod(surface, "getViewRootImpl");
         org.robolectric.util.ReflectionHelpers.callInstanceMethod(viewRoot, "ensureTouchMode",
                 org.robolectric.util.ReflectionHelpers.ClassParameter.from(boolean.class, true));
-        // AbsListView.WindowRunnable rejects clicks when the test window lacks focus.
+        // Match a visible, focused touch window before injecting events.
         controller.windowFocusChanged(true);
         assertTrue(surface.hasWindowFocus());
         Shadows.shadowOf(Looper.getMainLooper()).idle();
@@ -101,21 +101,11 @@ public class ClipboardSearchSurfaceTest {
         assertEquals(0, surface.results.pointToPosition((int) x - surface.results.getLeft(),
                 (int) y - surface.results.getTop()));
         touch(surface, 0, 0, 0, x, y);
-        int downPosition = org.robolectric.util.ReflectionHelpers.getField(surface.results, "mMotionPosition");
-        int downMode = org.robolectric.util.ReflectionHelpers.getField(surface.results, "mTouchMode");
         touch(surface, 0, 50, 1, x, y);
-        int upMode = org.robolectric.util.ReflectionHelpers.getField(surface.results, "mTouchMode");
-        boolean changed = org.robolectric.util.ReflectionHelpers.getField(surface.results, "mDataChanged");
-        Object click = org.robolectric.util.ReflectionHelpers.getField(surface.results, "mPerformClick");
-        // AbsListView delays PerformClick by the framework pressed-state duration.
-        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100));
-        assertEquals("position=" + downPosition + " mode=" + downMode
-                + " focused=" + surface.hasWindowFocus() + " touch=" + surface.isInTouchMode()
-                + " upMode=" + upMode + " changed=" + changed + " click=" + (click != null)
-                + " rowFocusable=" + row.hasExplicitFocusable() + " rowClickable=" + row.isClickable()
-                + " rowLongClickable=" + row.isLongClickable() + " listWidth=" + surface.results.getWidth()
-                + " x=" + x + " y=" + y + " pressedDuration=" + android.view.ViewConfiguration.getPressedStateDuration(),
-                List.of(clips.get(0)), picked);
+        // Robolectric 4.14.1 uses 125 ms here, unlike Android's 64 ms.
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(
+                android.view.ViewConfiguration.getPressedStateDuration() + 1L));
+        assertEquals(List.of(clips.get(0)), picked);
         int before = surface.results.getChildAt(0).getTop();
         float bottom = surface.results.getBottom() - 20;
         touch(surface, 100, 100, 0, x, bottom);
