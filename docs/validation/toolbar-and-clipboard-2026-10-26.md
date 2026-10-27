@@ -126,3 +126,11 @@ by this revision. Fixed touch/open stage names contain no clipboard/query text.
 The new screenshot validates positioning and pinned-before-recent presentation,
 not successful search opening. CI and APK reconstruction remain separate from the
 required physical retest of the updated search action.
+
+The translated-window regression moves the already-laid-out viewport using offsets,
+matching a window movement rather than reflowing children with stale measured sizes.
+The first test fixture used FrameLayout.layout and accidentally placed the generated
+touch center outside the viewport after reflow; that fixture was corrected. The
+production hit-test stays local to the descendant hierarchy. The circular fallback
+uses the native glyph's effective tint (including PorterDuff filters), rather than
+the application theme, which can differ from a custom dark keyboard theme.

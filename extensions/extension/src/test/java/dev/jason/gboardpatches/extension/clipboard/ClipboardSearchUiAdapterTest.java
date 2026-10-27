@@ -115,7 +115,9 @@ public class ClipboardSearchUiAdapterTest {
 
     @Test public void viewportCoordinatesWorkWhenTheKeyboardIsTranslatedAwayFromScreenOrigin() {
         ClipboardSearchUiAdapter ui = fixture(); root.bridge = true;
-        root.layout(30, 170, 430, 370);
+        // Moving the IME window does not remeasure/reflow its already laid-out children.
+        root.offsetLeftAndRight(30); root.offsetTopAndBottom(170);
+        assertEquals(48, ui.search.getHeight());
         assertTrue(ui.search.getGlobalVisibleRect(new android.graphics.Rect()));
         event(android.view.MotionEvent.ACTION_DOWN, true); event(android.view.MotionEvent.ACTION_UP, true);
         assertEquals(1, picks);
@@ -165,6 +167,18 @@ public class ClipboardSearchUiAdapterTest {
         assertEquals(circle.width(), circle.height());
         assertEquals(36, circle.centerX()); assertEquals(24, circle.centerY());
         assertEquals(12, ui.search.getPaddingLeft()); assertEquals(12, ui.search.getPaddingRight());
+        ui.close();
+    }
+
+    @Test public void fallbackCircleUsesTheActualNativeGlyphTintInsteadOfTheApplicationTheme() {
+        ClipboardSearchUiAdapter ui = fixture();
+        actions.removeView(peer);
+        android.widget.ImageView icon = new android.widget.ImageView(actions.getContext());
+        icon.setColorFilter(new android.graphics.PorterDuffColorFilter(android.graphics.Color.WHITE, android.graphics.PorterDuff.Mode.SRC_IN));
+        actions.addView(icon); icon.layout(100, 0, 148, 48); ui.alignToPeers();
+        android.graphics.drawable.InsetDrawable background = (android.graphics.drawable.InsetDrawable) ui.search.getBackground();
+        int color = ((android.graphics.drawable.GradientDrawable) background.getDrawable()).getColor().getDefaultColor();
+        assertEquals(0x1cffffff, color);
         ui.close();
     }
 

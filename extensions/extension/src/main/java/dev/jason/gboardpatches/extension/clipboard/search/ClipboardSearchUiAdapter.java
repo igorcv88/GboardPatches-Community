@@ -80,7 +80,8 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
             relative.set(0, 0, backgroundView.getWidth(), backgroundView.getHeight());
             group.offsetDescendantRectToMyCoords(backgroundView, relative);
         }
-        int state = source == null ? 0 : java.util.Arrays.hashCode(backgroundView.getDrawableState());
+        int foreground = ((SearchIcon) search.getDrawable()).foreground();
+        int state = 31 * (source == null ? 0 : java.util.Arrays.hashCode(backgroundView.getDrawableState())) + foreground;
         if (nativeBackground == source && backgroundBounds.equals(relative)
                 && backgroundWidth == peer.getWidth() && backgroundHeight == peer.getHeight()
                 && backgroundState == state && search.getBackground() != null) return;
@@ -95,9 +96,6 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
         if (copy == null) {
             android.graphics.drawable.GradientDrawable circle = new android.graphics.drawable.GradientDrawable();
             circle.setShape(android.graphics.drawable.GradientDrawable.OVAL);
-            TypedArray colors = search.getContext().obtainStyledAttributes(new int[]{android.R.attr.textColorPrimary});
-            int foreground;
-            try { foreground = colors.getColor(0, 0xffdadce0); } finally { colors.recycle(); }
             circle.setColor((foreground & 0x00ffffff) | 0x1c000000);
             copy = circle;
             int diameter = Math.min(peer.getWidth(), peer.getHeight());
@@ -244,6 +242,10 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
             if (paint.getColor() != color || paint.getColorFilter() != null) {
                 paint.setColor(color); paint.setColorFilter(null); invalidateSelf();
             }
+        }
+        int foreground() {
+            ColorFilter filter = paint.getColorFilter();
+            return filter instanceof android.graphics.PorterDuffColorFilter tint ? tint.getColor() : paint.getColor();
         }
         public int getIntrinsicWidth() { return size; }
         public int getIntrinsicHeight() { return size; }
