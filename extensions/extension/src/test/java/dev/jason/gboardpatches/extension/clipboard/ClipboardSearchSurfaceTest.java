@@ -89,7 +89,8 @@ public class ClipboardSearchSurfaceTest {
         float x = 300, y = surface.results.getTop() + row.getTop() + row.getHeight() / 2f;
         touch(surface, 0, 0, 0, x, y);
         touch(surface, 0, 50, 1, x, y);
-        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        // AbsListView delays PerformClick by the framework pressed-state duration.
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100));
         assertEquals(List.of(clips.get(0)), picked);
         int before = surface.results.getChildAt(0).getTop();
         float bottom = surface.results.getBottom() - 20;
