@@ -25,6 +25,7 @@ public final class ClipboardSearch1803Runtime {
 
     public static void opened(Object keyboard) {
         if (!main()) return;
+        ClipboardNativeSearch1803.clipboardShown();
         closeActive();
         traceBackKey(keyboard);
         if (!ClipboardNativeSearch1803.available()) return; // Fails closed: no button.
@@ -126,7 +127,8 @@ public final class ClipboardSearch1803Runtime {
         }
         void search() {
             try {
-                if (!ClipboardNativeSearch1803.open(keyboard, recycler, snapshot(adapter))) {
+                ClipboardSearchStyle style = ClipboardSearchStyle.capture(recycler, ui);
+                if (!ClipboardNativeSearch1803.open(keyboard, recycler, snapshot(adapter), style)) {
                     android.widget.Toast.makeText(recycler.getContext(), "Não foi possível abrir a busca do clipboard.", android.widget.Toast.LENGTH_SHORT).show();
                 }
             }

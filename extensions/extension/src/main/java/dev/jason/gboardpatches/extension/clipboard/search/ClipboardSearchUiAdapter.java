@@ -27,8 +27,11 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
     private int pointer = -1;
     private Drawable nativeBackground;
     private final Rect backgroundBounds = new Rect();
-    private int backgroundWidth, backgroundHeight, backgroundState;
+    private int backgroundWidth, backgroundHeight, backgroundState, controlColor, backdropColor;
     private final java.util.Map<Drawable, Boolean> paintedBackgrounds = new java.util.WeakHashMap<>();
+    private java.lang.ref.WeakReference<Drawable> renderedGlyph = new java.lang.ref.WeakReference<>(null);
+    private int renderedGlyphState;
+    private Integer renderedGlyphColor;
 
     public ClipboardSearchUiAdapter(ViewGroup actions, Runnable onSearch) {
         this.actions = actions;
@@ -67,6 +70,7 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
         if (edit == null || !edit.isShown()) edit = actions.findViewById(0x7f0b0525);
         View template = edit != null && edit.isShown() ? edit : peer;
         copyNativeTint(template);
+        copyGlyphSize(template);
         int width = peer.getWidth(), height = peer.getHeight();
         int right = peer.getLeft(), top = peer.getTop();
         if (search.getLeft() != right - width || search.getTop() != top
@@ -76,54 +80,75 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
         copyNativeBackground(template);
     }
 
-    /** The visible circle is often on the SoftKeyView content, not the outer key frame. */
+    /** Color of the disc behind the lens, as the native Edit control renders it. */
+    int controlColor() { return controlColor; }
+    int iconColor() { return ((SearchIcon) search.getDrawable()).foreground(); }
+    int controlSize() { return search.getHeight(); }
+    /** Composited header backdrop behind the disc, as last evaluated. */
+    int backdropColor() { return backdropColor; }
+
+    /**
+     * Previous builds cloned the native drawable via ConstantState and replayed its runtime
+     * tint/filter/alpha/foreground. Gboard's gray disc is a white asset made translucent gray
+     * at runtime; every property the replay missed (tint evaluated against the search
+     * button's state set instead of the key's, runtime paint color, a cloned highlight)
+     * produced an opaque white disc, and the white lens vanished on it. The disc is now
+     * built from the color the live native background actually renders, in its own state.
+     */
     private void copyNativeBackground(View peer) {
         View backgroundView = findBackground(peer);
         Drawable source = backgroundView == null ? null : backgroundView.getBackground();
-        Rect relative = new Rect(0, 0, peer.getWidth(), peer.getHeight());
-        if (backgroundView != null && backgroundView != peer && peer instanceof ViewGroup group) {
-            relative.set(0, 0, backgroundView.getWidth(), backgroundView.getHeight());
-            group.offsetDescendantRectToMyCoords(backgroundView, relative);
-        }
         int foreground = ((SearchIcon) search.getDrawable()).foreground();
+        float alpha = backgroundView == null ? 1f : ClipboardNativeSkin.alpha(backgroundView, peer);
         int state = 31 * (source == null ? 0 : java.util.Arrays.hashCode(backgroundView.getDrawableState())) + foreground;
-        if (nativeBackground == source && backgroundBounds.equals(relative)
-                && backgroundWidth == peer.getWidth() && backgroundHeight == peer.getHeight()
+        if (source != null) state = 31 * (31 * state + source.getAlpha() + Float.floatToIntBits(alpha))
+                + backgroundView.getWidth() * 8191 + backgroundView.getHeight();
+        if (nativeBackground == source && backgroundWidth == peer.getWidth() && backgroundHeight == peer.getHeight()
                 && backgroundState == state && search.getBackground() != null) return;
-        nativeBackground = source; backgroundBounds.set(relative);
+        nativeBackground = source;
         backgroundWidth = peer.getWidth(); backgroundHeight = peer.getHeight(); backgroundState = state;
-        Drawable copy = null;
-        if (source != null && source.getConstantState() != null) {
-            copy = source.getConstantState().newDrawable(search.getResources()).mutate();
-            copy.setState(backgroundView.getDrawableState()); copy.setAlpha(source.getAlpha());
+        Rect painted = null;
+        int color = 0;
+        android.graphics.Bitmap bitmap = source == null ? null
+                : ClipboardNativeSkin.render(source, backgroundView.getWidth(), backgroundView.getHeight());
+        if (bitmap != null) {
+            try {
+                painted = ClipboardNativeSkin.opaqueBounds(bitmap);
+                color = ClipboardNativeSkin.centerColor(bitmap, painted, alpha);
+            } finally { bitmap.recycle(); }
+            if (backgroundView != peer && peer instanceof ViewGroup group) group.offsetDescendantRectToMyCoords(backgroundView, painted);
         }
-        if (copy == null) {
-            android.graphics.drawable.GradientDrawable circle = new android.graphics.drawable.GradientDrawable();
-            circle.setShape(android.graphics.drawable.GradientDrawable.OVAL);
-            circle.setColor((foreground & 0x00ffffff) | 0x1c000000);
-            copy = circle;
-            int diameter = Math.min(peer.getWidth(), peer.getHeight());
-            int left = (peer.getWidth() - diameter) / 2, top = (peer.getHeight() - diameter) / 2;
-            relative.set(left, top, left + diameter, top + diameter);
+        if (painted == null) {
+            painted = new Rect(0, 0, peer.getWidth(), peer.getHeight());
+            color = ClipboardNativeSkin.withAlpha(foreground, 0x1c);
         }
-        search.setBackground(new android.graphics.drawable.InsetDrawable(copy,
-                relative.left, relative.top, Math.max(0, peer.getWidth() - relative.right),
-                Math.max(0, peer.getHeight() - relative.bottom)));
-        // setBackground reapplies ImageButton's cleared framework tint, including through
-        // InsetDrawable. Apply the native skin AFTER assignment, or it becomes solid white.
-        if (source != null && backgroundView != null) {
-            if (backgroundView.getBackgroundTintList() != null) {
-                copy.setTintList(backgroundView.getBackgroundTintList());
-                if (backgroundView.getBackgroundTintMode() != null) copy.setTintMode(backgroundView.getBackgroundTintMode());
-            } else if (source.getColorFilter() != null) copy.setColorFilter(source.getColorFilter());
-        }
-        Drawable foregroundDrawable = backgroundView == null ? null : backgroundView.getForeground();
-        if (foregroundDrawable == null) foregroundDrawable = peer.getForeground();
-        if (foregroundDrawable != null && foregroundDrawable.getConstantState() != null) {
-            search.setForeground(foregroundDrawable.getConstantState().newDrawable(search.getResources()).mutate());
-        } else search.setForeground(null);
-        search.setPadding(Math.max(0, relative.left), Math.max(0, relative.top),
-                Math.max(0, peer.getWidth() - relative.right), Math.max(0, peer.getHeight() - relative.bottom));
+        // Last guard, on what is actually composited: lens over disc over the header's own
+        // backdrop. A disc the lens is not legible on is never accepted.
+        int[] at = new int[2];
+        peer.getLocationInWindow(at);
+        backdropColor = ClipboardNativeSkin.backdrop(actions, at[0] + painted.centerX(), at[1] + painted.centerY(), 0);
+        color = ClipboardNativeSkin.legibleDisc(foreground, color, backdropColor);
+        controlColor = color;
+        int diameter = Math.min(painted.width(), painted.height());
+        int left = painted.centerX() - diameter / 2, top = painted.centerY() - diameter / 2;
+        backgroundBounds.set(left, top, left + diameter, top + diameter);
+        int insetRight = Math.max(0, peer.getWidth() - backgroundBounds.right);
+        int insetBottom = Math.max(0, peer.getHeight() - backgroundBounds.bottom);
+        search.setBackground(new android.graphics.drawable.InsetDrawable(disc(color),
+                backgroundBounds.left, backgroundBounds.top, insetRight, insetBottom));
+        // Own press feedback, shaped like the disc: a cloned native highlight could cover the lens.
+        android.graphics.drawable.StateListDrawable pressed = new android.graphics.drawable.StateListDrawable();
+        pressed.addState(new int[]{android.R.attr.state_pressed}, disc(ClipboardNativeSkin.withAlpha(foreground, 0x29)));
+        search.setForeground(new android.graphics.drawable.InsetDrawable(pressed,
+                backgroundBounds.left, backgroundBounds.top, insetRight, insetBottom));
+        search.setPadding(Math.max(0, backgroundBounds.left), Math.max(0, backgroundBounds.top), insetRight, insetBottom);
+    }
+
+    private static Drawable disc(int color) {
+        android.graphics.drawable.GradientDrawable circle = new android.graphics.drawable.GradientDrawable();
+        circle.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        circle.setColor(color);
+        return circle;
     }
 
     private View findBackground(View view) {
@@ -140,39 +165,49 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
         if (background instanceof android.graphics.drawable.ColorDrawable color) return Color.alpha(color.getColor()) > 0 ? view : null;
         Boolean painted = paintedBackgrounds.get(background);
         if (painted == null) {
-            painted = paintsAtRest(background, view.getDrawableState());
+            android.graphics.Bitmap probe = ClipboardNativeSkin.render(background, view.getWidth(), view.getHeight());
+            painted = probe != null;
+            if (probe != null) probe.recycle();
             paintedBackgrounds.put(background, painted);
         }
         return painted ? view : null;
     }
 
-    private static boolean paintsAtRest(Drawable source, int[] state) {
-        if (source == null || source.getAlpha() == 0) return false;
-        if (source instanceof android.graphics.drawable.GradientDrawable gradient) {
-            android.content.res.ColorStateList color = gradient.getColor();
-            if (color != null) return Color.alpha(color.getColorForState(state, color.getDefaultColor())) > 0;
-        }
-        if (source instanceof android.graphics.drawable.LayerDrawable layers) {
-            for (int i = 0; i < layers.getNumberOfLayers(); i++) {
-                if (layers.getId(i) != android.R.id.mask && paintsAtRest(layers.getDrawable(i), state)) return true;
+    /** Lens drawn at the size of the native glyph, so both controls look proportional. */
+    private void copyGlyphSize(View template) {
+        android.widget.ImageView glyph = glyph(template);
+        int size = glyph == null ? 0 : ClipboardNativeSkin.glyphSize(glyph);
+        SearchIcon icon = (SearchIcon) search.getDrawable();
+        if (size > 0 && icon.size(size)) { search.setImageDrawable(null); search.setImageDrawable(icon); }
+    }
+
+    private static android.widget.ImageView glyph(View view) {
+        if (view.getVisibility() != View.VISIBLE) return null;
+        if (view instanceof android.widget.ImageView image && image.getDrawable() != null) return image;
+        if (view instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                android.widget.ImageView found = glyph(group.getChildAt(i));
+                if (found != null) return found;
             }
-            return false;
         }
-        if (source.getConstantState() == null) return false;
-        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(16, 16, android.graphics.Bitmap.Config.ARGB_8888);
-        try {
-            Drawable probe = source.getConstantState().newDrawable().mutate();
-            probe.setState(state); probe.setAlpha(source.getAlpha()); probe.setBounds(0, 0, 16, 16);
-            probe.draw(new Canvas(bitmap));
-            int[] pixels = new int[256]; bitmap.getPixels(pixels, 0, 16, 0, 0, 16, 16);
-            for (int pixel : pixels) if (Color.alpha(pixel) > 0) return true;
-            return false;
-        } catch (Throwable ignored) { return false; }
-        finally { bitmap.recycle(); }
+        return null;
+    }
+
+    /** Rendered once per native glyph drawable and state, not on every layout pass. */
+    private Integer glyphColor(android.widget.ImageView image) {
+        Drawable glyph = image.getDrawable();
+        int state = java.util.Arrays.hashCode(image.getDrawableState()) * 31 + image.getImageAlpha();
+        if (glyph != null && glyph == renderedGlyph.get() && state == renderedGlyphState) return renderedGlyphColor;
+        renderedGlyph = new java.lang.ref.WeakReference<>(glyph);
+        renderedGlyphState = state;
+        renderedGlyphColor = ClipboardNativeSkin.glyphColor(image);
+        return renderedGlyphColor;
     }
 
     private boolean copyNativeTint(View peer) {
         if (peer instanceof android.widget.ImageView image) {
+            Integer rendered = glyphColor(image);
+            if (rendered != null) { ((SearchIcon) search.getDrawable()).color(rendered); return true; }
             android.content.res.ColorStateList tint = image.getImageTintList();
             if (tint != null) {
                 search.getDrawable().clearColorFilter();
@@ -251,12 +286,16 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
 
     static final class SearchIcon extends Drawable {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final int size;
+        private int size;
         private ColorFilter sampledFilter;
         private int sampledBase, sampledColor;
         SearchIcon(int color, int size) {
             this.size = size; paint.setColor(color); paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeCap(Paint.Cap.ROUND); paint.setStrokeJoin(Paint.Join.ROUND);
+        }
+        boolean size(int value) {
+            if (value <= 0 || value == size) return false;
+            size = value; invalidateSelf(); return true;
         }
         void color(int color) {
             if (paint.getColor() != color || paint.getColorFilter() != null) {

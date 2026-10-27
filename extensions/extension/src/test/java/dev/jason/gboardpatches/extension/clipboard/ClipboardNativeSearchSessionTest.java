@@ -57,7 +57,8 @@ public class ClipboardNativeSearchSessionTest {
 
     @Test public void everyFailedOpenStepRollsBackWhatWasDone() {
         Object[][] cases = {
-            {"surface-false", List.of("surface")},
+            {"surface-false", List.of("surface", "hide")},
+            {"surface", List.of("surface", "hide")},
             {"alphabet-false", List.of("surface", "alphabet", "hide")},
             {"route-false", List.of("surface", "alphabet", "route", "restore", "hide", "clipboard")},
             {"route", List.of("surface", "alphabet", "route", "restore", "hide", "clipboard")},

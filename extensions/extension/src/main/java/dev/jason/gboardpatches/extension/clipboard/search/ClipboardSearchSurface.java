@@ -1,8 +1,8 @@
 package dev.jason.gboardpatches.extension.clipboard;
 
 import android.content.Context;
-import android.content.res.TypedArray;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
@@ -62,28 +62,62 @@ public final class ClipboardSearchSurface extends LinearLayout {
 
     public ClipboardSearchSurface(Context context, View field, int heightPx,
             ClipboardSearchController worker, Listener listener) {
+        this(context, field, heightPx, worker, listener, ClipboardSearchStyle.fallback(context));
+    }
+
+    /** Same backdrop, cards, text and header controls as the native clipboard it replaces. */
+    ClipboardSearchSurface(Context context, View field, int heightPx,
+            ClipboardSearchController worker, Listener listener, ClipboardSearchStyle style) {
         super(context);
         this.field = field; this.worker = worker; this.listener = listener;
         setOrientation(VERTICAL);
-        int foreground = themeColor(context, android.R.attr.textColorPrimary, Color.DKGRAY);
-        setBackgroundColor(themeColor(context, android.R.attr.colorBackground, Color.WHITE));
+        setBackgroundColor(style.panelColor);
         setLayoutParams(new ViewGroup.LayoutParams(-1, heightPx));
+        int gap = style.cardGap;
 
         LinearLayout bar = new LinearLayout(context);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        FrameLayout slot = new FrameLayout(context);
-        slot.addView(field, new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER_VERTICAL));
-        bar.addView(slot, new LayoutParams(0, dp(context, 44), 1));
-        close = new ImageButton(context);
-        close.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
-        close.setBackgroundColor(Color.TRANSPARENT);
-        close.setContentDescription("Close clipboard search");
+        bar.setPadding(gap * 2, gap * 2, gap * 2, gap);
+        close = new ImageButton(context, null, 0);
+        close.setImageDrawable(new BackIcon(style.iconColor, Math.round(style.controlSize * 0.5f)));
+        close.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
+        close.setBackground(pill(style.controlColor, style.controlSize / 2f));
+        close.setPadding(0, 0, 0, 0);
+        close.setContentDescription("Back to clipboard");
         close.setOnClickListener(v -> { if (!this.closed) this.listener.onClose(); });
-        bar.addView(close, new LayoutParams(dp(context, 44), dp(context, 44)));
+        bar.addView(close, new LayoutParams(style.controlSize, style.controlSize));
+        FrameLayout slot = new FrameLayout(context);
+        slot.setBackground(pill(style.controlColor, style.controlSize / 2f));
+        slot.addView(field, new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER_VERTICAL));
+        LayoutParams slotParams = new LayoutParams(0, style.controlSize, 1);
+        slotParams.leftMargin = gap * 2;
+        bar.addView(slot, slotParams);
         addView(bar, new LayoutParams(-1, -2));
+        if (field instanceof TextView text) {
+            // No platform EditText underline: the field is part of the header pill.
+            text.setBackground(null);
+            text.setPadding(style.controlSize / 2, 0, style.controlSize / 2, 0);
+            text.setTextColor(style.iconColor);
+            text.setHintTextColor(ClipboardNativeSkin.withAlpha(style.iconColor,
+                    Math.round(Color.alpha(style.iconColor) * 0.6f)));
+            text.setTextSize(TypedValue.COMPLEX_UNIT_PX, style.textSize);
+            if (style.typeface != null) text.setTypeface(style.typeface);
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                android.graphics.drawable.GradientDrawable cursor = new android.graphics.drawable.GradientDrawable();
+                cursor.setColor(style.iconColor);
+                cursor.setSize(Math.max(1, Math.round(2 * context.getResources().getDisplayMetrics().density)), -1);
+                text.setTextCursorDrawable(cursor);
+            }
+        }
 
         results = new ListView(context);
         results.setAdapter(adapter);
+        results.setDivider(null);
+        results.setDividerHeight(0);
+        results.setSelector(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        results.setCacheColorHint(Color.TRANSPARENT);
+        results.setPadding(gap * 2, gap / 2, gap * 2, gap * 2);
+        results.setClipToPadding(false);
         results.setOnItemClickListener((parent, view, position, id) -> {
             if (this.closed) return;
             Clip clip = adapter.getItem(position);
@@ -104,11 +138,11 @@ public final class ClipboardSearchSurface extends LinearLayout {
         addView(results, new LayoutParams(-1, 0, 1));
         empty = new TextView(context);
         empty.setText("No matching clips");
-        empty.setTextColor(foreground);
+        empty.setTextColor(style.textColor);
         empty.setGravity(Gravity.CENTER);
         empty.setVisibility(GONE);
         addView(empty, new LayoutParams(-1, dp(context, 40)));
-        adapter.color = foreground;
+        adapter.style = style;
 
         watcher = new TextWatcher() {
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -227,19 +261,13 @@ public final class ClipboardSearchSurface extends LinearLayout {
 
     private static final class Adapter extends BaseAdapter {
         List<Clip> items = List.of();
-        int color;
+        ClipboardSearchStyle style;
         long pending = Long.MIN_VALUE;
         public int getCount() { return items.size(); }
         public Clip getItem(int position) { return items.get(position); }
         public long getItemId(int position) { return items.get(position).id; }
         public View getView(int position, View convert, ViewGroup parent) {
-            TextView row = convert instanceof TextView reused ? reused : new TextView(parent.getContext());
-            int pad = dp(parent.getContext(), 12);
-            row.setPadding(pad, pad / 2, pad, pad / 2);
-            row.setMaxLines(2);
-            row.setEllipsize(TextUtils.TruncateAt.END);
-            row.setTextColor(color);
-            row.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+            TextView row = convert instanceof TextView reused ? reused : card(parent.getContext(), style);
             Clip clip = items.get(position);
             // Preview only: the full text stays in the snapshot for search and paste.
             String text = clip.text;
@@ -249,9 +277,58 @@ public final class ClipboardSearchSurface extends LinearLayout {
         }
     }
 
-    private static int themeColor(Context context, int attr, int fallback) {
-        TypedArray values = context.obtainStyledAttributes(new int[] {attr});
-        try { return values.getColor(0, fallback); } finally { values.recycle(); }
+    /** A history card: native color, radius, padding, spacing and text; pressed like a key. */
+    private static TextView card(Context context, ClipboardSearchStyle style) {
+        TextView row = new TextView(context);
+        int half = style.cardGap / 2;
+        android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
+        int pressed = ClipboardNativeSkin.withAlpha(style.textColor, 0x1f);
+        states.addState(new int[]{android.R.attr.state_pressed}, new android.graphics.drawable.LayerDrawable(
+                new Drawable[]{pill(style.cardColor, style.cardRadius), pill(pressed, style.cardRadius)}));
+        states.addState(new int[0], pill(style.cardColor, style.cardRadius));
+        row.setBackground(new android.graphics.drawable.InsetDrawable(states, 0, half, 0, style.cardGap - half));
+        row.setPadding(style.cardPaddingH, style.cardPaddingV + half,
+                style.cardPaddingH, style.cardPaddingV + style.cardGap - half);
+        row.setMaxLines(style.maxLines);
+        row.setEllipsize(TextUtils.TruncateAt.END);
+        row.setTextColor(style.textColor);
+        row.setTextSize(TypedValue.COMPLEX_UNIT_PX, style.textSize);
+        if (style.typeface != null) row.setTypeface(style.typeface);
+        return row;
+    }
+
+    private static Drawable pill(int color, float radius) {
+        android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable();
+        shape.setColor(color);
+        shape.setCornerRadius(radius);
+        return shape;
+    }
+
+    /** Back arrow drawn like the search lens: a stroke glyph in the native icon color. */
+    static final class BackIcon extends Drawable {
+        private final android.graphics.Paint paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        private final int size;
+        BackIcon(int color, int size) {
+            this.size = size; paint.setColor(color); paint.setStyle(android.graphics.Paint.Style.STROKE);
+            paint.setStrokeCap(android.graphics.Paint.Cap.ROUND); paint.setStrokeJoin(android.graphics.Paint.Join.ROUND);
+        }
+        public int getIntrinsicWidth() { return size; }
+        public int getIntrinsicHeight() { return size; }
+        public void draw(android.graphics.Canvas canvas) {
+            android.graphics.Rect b = getBounds(); float unit = Math.min(b.width(), b.height()) / 24f;
+            float left = b.exactCenterX() - 12 * unit, top = b.exactCenterY() - 12 * unit;
+            paint.setStrokeWidth(2 * unit);
+            android.graphics.Path arrow = new android.graphics.Path();
+            arrow.moveTo(left + 11 * unit, top + 5 * unit);
+            arrow.lineTo(left + 4 * unit, top + 12 * unit);
+            arrow.lineTo(left + 11 * unit, top + 19 * unit);
+            arrow.moveTo(left + 4 * unit, top + 12 * unit);
+            arrow.lineTo(left + 20 * unit, top + 12 * unit);
+            canvas.drawPath(arrow, paint);
+        }
+        public void setAlpha(int alpha) { paint.setAlpha(alpha); invalidateSelf(); }
+        public void setColorFilter(android.graphics.ColorFilter filter) { paint.setColorFilter(filter); invalidateSelf(); }
+        public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
     }
 
     static int dp(Context context, int value) {
