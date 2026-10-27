@@ -53,6 +53,8 @@ class fjv {
 }
 
 class jt {
+    public int fullRefreshes;
+    public void gz() { fullRefreshes++; }
     public final List<Integer> removed = new ArrayList<>();
     public void n(int position) { removed.add(Integer.valueOf(position)); }
 }
@@ -76,7 +78,10 @@ class fjk extends jt {
     private void R() { refreshCount++; }
 }
 
-class kr {}
+class kr {
+    public int position;
+    public int b() { return position; }
+}
 
 class fji extends kr {
     public final TextView t;

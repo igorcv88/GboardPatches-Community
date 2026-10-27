@@ -45,8 +45,8 @@ public class ClipboardSearch1803RuntimeTest {
         assertEquals(original, adapter.n);
     }
 
-    @Test public void panelIsUntouchedWhileNativeBindingsAreUnreviewed() {
-        assertFalse(ClipboardNativeSearch1803.available());
+    @Test public void searchButtonIsAttachedAndRemovedWithTheNativePanel() {
+        assertTrue(ClipboardNativeSearch1803.available());
         Activity activity=Robolectric.buildActivity(Activity.class).setup().get();
         LinearLayout root=new LinearLayout(activity);
         LinearLayout actions=new LinearLayout(activity); actions.setId(0x7f0b0527); root.addView(actions);
@@ -55,8 +55,10 @@ public class ClipboardSearch1803RuntimeTest {
         activity.setContentView(root);
         Keyboard keyboard=new Keyboard(); keyboard.c=new Adapter(); keyboard.l=recycler;
         ClipboardSearch1803Runtime.opened(keyboard);
-        assertEquals(0, actions.getChildCount());
+        assertEquals(1, actions.getChildCount());
+        assertEquals("Search clipboard", actions.getChildAt(0).getContentDescription());
         ClipboardSearch1803Runtime.closed(keyboard);
+        assertEquals(0, actions.getChildCount());
         assertSame(body, recycler.getParent());
     }
 }

@@ -101,6 +101,7 @@ public final class GboardClipboardRuntime {
 
     public static void afterAdapterTrim(Object receiver) {
         UI_HOOK_ADAPTER.afterAdapterTrim(receiver);
+        ClipboardPinned1803Runtime.afterTrim(receiver);
         ClipboardSearch1803Runtime.changed(receiver);
     }
 

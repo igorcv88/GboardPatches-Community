@@ -41,7 +41,7 @@ public class ClipboardNativeSearch1803HostTest {
     }
 
     @Before public void provider() { ClipboardNativeSearch1803.providerInterface = Provider.class.getName(); }
-    @After public void reset() { ClipboardNativeSearch1803.providerInterface = "oqa"; }
+    @After public void reset() { ClipboardNativeSearch1803.inputStarted(null); ClipboardNativeSearch1803.providerInterface = "oqa"; }
 
     private Field attachedField(Activity activity) {
         FrameLayout root = new FrameLayout(activity);
@@ -63,6 +63,15 @@ public class ClipboardNativeSearch1803HostTest {
         assertEquals(java.util.Arrays.asList(field, null), service.providers);
         assertEquals(List.of(false, false), service.resets);
         assertFalse(host.switchToAlphabet());
+    }
+
+    @Test public void themedApplicationContextUsesTheBoundInputServiceInsteadOfFailingSilently() {
+        Service service = Robolectric.setupService(Service.class);
+        android.content.Context themed = new android.view.ContextThemeWrapper(service.getApplicationContext(), android.R.style.Theme_Material);
+        ClipboardNativeSearch1803.inputStarted(service);
+        assertSame(service, ClipboardNativeSearch1803.service(themed));
+        ClipboardNativeSearch1803.inputStarted(null);
+        assertNull(ClipboardNativeSearch1803.service(themed));
     }
 
     @Test public void fieldMustBeAttachedFocusableAndHaveAConnectionBeforeRouting() {
@@ -109,9 +118,9 @@ public class ClipboardNativeSearch1803HostTest {
         assertFalse(ClipboardNativeSearch1803.isOpen());
     }
 
-    @Test public void searchCannotOpenWhileBindingsAreUnreviewed() {
+    @Test public void searchIsEnabledButMissingNativeActionsFailClosed() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        assertFalse(ClipboardNativeSearch1803.available());
+        assertTrue(ClipboardNativeSearch1803.available());
         assertFalse(ClipboardNativeSearch1803.open(null, new View(activity), List.of()));
         assertFalse(ClipboardNativeSearch1803.isOpen());
     }

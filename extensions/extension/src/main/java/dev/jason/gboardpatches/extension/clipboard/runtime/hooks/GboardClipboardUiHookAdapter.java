@@ -104,7 +104,7 @@ final class GboardClipboardUiHookAdapter {
         if (allowedRecentCount < recentCount) {
             for (int index = recentCount; index > allowedRecentCount; index--) {
                 items.remove(index);
-                handles.adapterNotifyItemRemovedMethod.invoke(receiver, index);
+                ClipboardPinned1803Runtime.notifyRemoved(receiver, index);
             }
             handles.adapterRecentCountField.setInt(receiver, allowedRecentCount);
             handles.adapterRefreshMethod.invoke(receiver);

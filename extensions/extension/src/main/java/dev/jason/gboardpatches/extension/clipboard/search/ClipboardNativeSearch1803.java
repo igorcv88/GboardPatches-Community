@@ -27,20 +27,39 @@ import java.util.List;
  * Touch: Loup declares its own {@code onComputeInsets} (0x2ed414); {@link #afterComputeInsets}
  * adds only the surface rectangle on top of the native result, and only while it is shown.
  *
- * <p>Fails closed: {@link #available} stays false until every flag below is confirmed on the
- * 18.0.3 binary and on device. Until then the search button is not shown at all.
+ * <p>Search is enabled for the reviewed binary. Missing native actions, detached input fields
+ * or failed provider confirmation abort opening and restore the editor connection.
  */
 public final class ClipboardNativeSearch1803 {
     static final String FIELD_CLASS = "com.google.android.libraries.inputmethod.widgets.EditTextOnKeyboard";
     static String providerInterface = "oqa"; // Loqa; replaceable only by tests.
 
-    /** Each flag flips to true only with binary and device evidence (clipboard-native-search-plan). */
-    static final boolean ROUTING_RESTORE_REVIEWED = false;     // T2: Loqe.n(null) / Loup.C branch
-    static final boolean ALPHABET_SWITCH_REVIEWED = false;     // T1: clipboard body -> alphabet
-    static final boolean RETURN_TO_CLIPBOARD_REVIEWED = false; // T1: alphabet -> clipboard panel
-    static final boolean INSETS_REVIEWED = false;              // T3: device measurement
-    /** Persistent delete from the results (Lfjo.h); separate so search never implies delete. */
+    /** Native routing, action factories and catalog were checked against the exact 18.0.3 APK.
+     * Device layout remains an acceptance test, not a compile-time switch that hides search. */
     static final boolean DELETE_REVIEWED = false;
+    private static java.lang.ref.WeakReference<Object> controller = new java.lang.ref.WeakReference<>(null);
+    public static void controllerPrepared(Object value) {
+        if (!main() || value == null) return;
+        // The entry hook owns an mlh, not M's overwritten return register (mln).
+        // Keep the last valid controller if an incompatible caller is ever observed.
+        try {
+            Object catalog = ClipboardNative1803.field(value, "h");
+            // ays is SimpleArrayMap, not java.util.Map. Check its reviewed get ABI.
+            if (catalog != null) {
+                catalog.getClass().getMethod("get", Object.class);
+                controller = new java.lang.ref.WeakReference<>(value);
+            }
+        } catch (Throwable ignored) { }
+
+    }
+
+    private static java.lang.ref.WeakReference<InputMethodService> inputService = new java.lang.ref.WeakReference<>(null);
+    public static void inputStarted(Object value) {
+        if (!main()) return;
+        end(); inputService = new java.lang.ref.WeakReference<>(value instanceof InputMethodService ime ? ime : null);
+    }
+
+    static Object returnAction() { return ClipboardNative1803.clipboardAction(controller.get()); }
 
     private static ClipboardNativeSearchSession active;
     private static ClipboardSearchSurface surface;
@@ -49,19 +68,33 @@ public final class ClipboardNativeSearch1803 {
     private ClipboardNativeSearch1803() {}
 
     public static boolean available() {
-        return ROUTING_RESTORE_REVIEWED && ALPHABET_SWITCH_REVIEWED
-                && RETURN_TO_CLIPBOARD_REVIEWED && INSETS_REVIEWED;
+        return true;
     }
 
     /** Called from the clipboard header search button with the current text snapshot. */
     public static boolean open(Object keyboard, View anchor, List<ClipboardSearchSurface.Clip> clips) {
         if (!main() || !available() || active != null) return false;
+        reportState("open-requested");
         InputMethodService ime = service(anchor.getContext());
-        if (ime == null) return false;
+        if (ime == null) { reportState("missing-service"); return false; }
         try {
             Object field = Class.forName(FIELD_CLASS, true, ime.getClass().getClassLoader())
-                    .getConstructor(Context.class).newInstance(ime);
+                    .getConstructor(Context.class).newInstance(anchor.getContext());
+            if (field instanceof android.widget.EditText text) {
+                text.setSingleLine(true);
+                text.setHint("Search clipboard");
+                text.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+                        | android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
+                        | android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN);
+            }
+            Object returnAction = returnAction();
+            Object alphabetAction = ClipboardNative1803.backKeyAction(anchor.getRootView());
+            if (returnAction == null || alphabetAction == null) {
+                reportState(returnAction == null ? "missing-return-action" : "missing-alphabet-action"); return false;
+            }
             Host host = new Host(ime, (View) field, keyboard, anchor.getRootView());
+            host.returnAction = returnAction;
+            host.alphabetAction = alphabetAction;
             return start(ime, (View) field, clips, host);
         } catch (Throwable failure) {
             report("open", failure);
@@ -72,8 +105,9 @@ public final class ClipboardNativeSearch1803 {
     static boolean start(InputMethodService ime, View field, List<ClipboardSearchSurface.Clip> clips,
             ClipboardNativeSearchSession.Host host) {
         ClipboardNativeSearchSession session = new ClipboardNativeSearchSession(host);
-        int height = Math.round(ime.getResources().getDisplayMetrics().heightPixels * 0.38f);
-        surface = new ClipboardSearchSurface(ime, field, height,
+        int height = Math.min(Math.round(ime.getResources().getDisplayMetrics().heightPixels * 0.30f),
+                Math.round(240 * ime.getResources().getDisplayMetrics().density));
+        surface = new ClipboardSearchSurface(field.getContext(), field, height,
                 ClipboardSearchController.forImeMainThread(), new ClipboardSearchSurface.Listener() {
                     public void onPick(ClipboardSearchSurface.Clip clip) { session.pick(clip.text); finish(); }
                     public void onClose() { session.cancel(); finish(); }
@@ -174,7 +208,7 @@ public final class ClipboardNativeSearch1803 {
         worker.start();
     }
 
-    static boolean isOpen() { return active != null && active.state() == ClipboardNativeSearchSession.State.OPEN; }
+    public static boolean isOpen() { return active != null && active.state() == ClipboardNativeSearchSession.State.OPEN; }
 
     private static void finish() {
         active = null;
@@ -188,6 +222,7 @@ public final class ClipboardNativeSearch1803 {
         private final View field;
         private final Object keyboard;
         private final View panelRoot;
+        private Object returnAction, alphabetAction;
         Host(InputMethodService ime, View field) { this(ime, field, null, null); }
         Host(InputMethodService ime, View field, Object keyboard, View panelRoot) {
             this.ime = ime; this.field = field; this.keyboard = keyboard; this.panelRoot = panelRoot;
@@ -209,11 +244,11 @@ public final class ClipboardNativeSearch1803 {
 
         /**
          * Emits the back-to-prime key's own action (0x7f0b0521) through ClipboardKeyboard.x.
-         * Pending device proof that this is the event a tap produces (ALPHABET_SWITCH_REVIEWED).
+         * Uses the same pnu/nur factory and dispatcher as the native access point.
          */
         @Override public boolean switchToAlphabet() {
-            if (!ALPHABET_SWITCH_REVIEWED) return false;
-            return ClipboardNative1803.dispatch(keyboard, ClipboardNative1803.backKeyAction(panelRoot));
+            return ClipboardNative1803.dispatch(keyboard, alphabetAction != null
+                    ? alphabetAction : ClipboardNative1803.backKeyAction(panelRoot));
         }
 
         /** Mirrors JarvisPromptKeyboard.K: focus, obtain the field connection, then route. */
@@ -251,7 +286,7 @@ public final class ClipboardNativeSearch1803 {
         }
 
         @Override public void returnToClipboard() {
-            // Binding pending (RETURN_TO_CLIPBOARD_REVIEWED): see plan, T1.
+            ClipboardNative1803.dispatch(keyboard, returnAction);
         }
 
         @Override public boolean commitToEditor(String text) {
@@ -298,10 +333,14 @@ public final class ClipboardNativeSearch1803 {
         for (Context c = context; c != null; c = c instanceof ContextWrapper w ? w.getBaseContext() : null) {
             if (c instanceof InputMethodService ime) return ime;
         }
-        return null;
+        return inputService.get();
     }
 
     private static boolean main() { return Looper.myLooper() == Looper.getMainLooper(); }
+
+    private static void reportState(String state) {
+        android.util.Log.w("GboardPatches", "Clipboard native search r12: " + state);
+    }
 
     private static void report(String operation, Throwable failure) {
         android.util.Log.w("GboardPatches", "Clipboard native search: " + operation

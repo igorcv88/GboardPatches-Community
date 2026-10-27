@@ -16,8 +16,36 @@ internal val gboardClipboardSearch1803Patch = bytecodePatch(
     description = "Clipboard search on the native alphabet keyboard with results above it.",
 ) {
     compatibleWith(COMPATIBILITY_GBOARD)
-    dependsOn(gboardClipboardItemBindPatch, gboardTermuxClipboardDiagnosticsPatch)
+    dependsOn(gboardClipboardPinned1803Patch, gboardTermuxClipboardDiagnosticsPatch)
     execute {
+        findMutableMethodOrThrow(INPUT_METHOD_SERVICE_OWNER, "onStartInputView", "V",
+            listOf("Landroid/view/inputmethod/EditorInfo;", "Z"))
+            .applyVoidExitLifecycleDelegate(RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_INPUT_STARTED, "p0 .. p0")
+        // InputView's Ljqy interceptor can consume the event before any SoftKeyboardView.
+        // Handle the search gesture before that interceptor, in the input viewport coordinates.
+        val touch = findMutableMethodOrThrow("Lcom/google/android/libraries/inputmethod/inputview/InputView;",
+            "dispatchTouchEvent", "Z", listOf("Landroid/view/MotionEvent;"))
+        val touchCall = RuntimeCallId.CLIPBOARD_SEARCH_TOUCH
+        check(touch.implementation!!.registerCount == 7) { "Unreviewed keyboard touch registers" }
+        if (touch.implementation!!.instructions.none { it.isMethodReference(touchCall.encodedAbi) }) {
+            touch.addInstructions(0, """
+                ${RuntimeCallEmitter.invoke(touchCall, "p0 .. p1")}
+                move-result v0
+                if-eqz v0, :gboard_clipboard_stock_touch
+                return v0
+                :gboard_clipboard_stock_touch
+                nop
+            """.trimIndent())
+        }
+        // M reuses p0 for G():mln before RETURN_VOID. Capture the mlh receiver at entry.
+        val controller = findMutableMethodOrThrow("Lmlh;", "M", "V", listOf("Landroid/view/View;"))
+        val capture = RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_CONTROLLER
+        if (controller.implementation!!.instructions.none { it.isMethodReference(capture.encodedAbi) }) {
+            controller.addInstructions(0, RuntimeCallEmitter.invoke(capture, "p0 .. p0"))
+        }
+        check(controller.implementation!!.instructions.first().isMethodReference(capture.encodedAbi)) {
+            "Clipboard controller must be captured before M overwrites its receiver"
+        }
         findMutableMethodOrThrow(CLIPBOARD_KEYBOARD_CLASS, "e", "V",
             listOf("Landroid/view/inputmethod/EditorInfo;", "Ljava/lang/Object;"))
             .applyVoidExitLifecycleDelegate(RuntimeCallId.CLIPBOARD_SEARCH_OPENED, "p0 .. p0")
