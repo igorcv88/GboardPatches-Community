@@ -33,10 +33,9 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
     public ClipboardSearchUiAdapter(ViewGroup actions, Runnable onSearch) {
         this.actions = actions;
         Context context = actions.getContext();
-        search = new ImageButton(context);
-        // Framework ImageButton tints are unrelated to Gboard's skinned SoftKeyView.
-        search.setBackgroundTintList(null);
-        search.setImageTintList(null);
+        // No imageButtonStyle: its framework tint state would overwrite Gboard's skin
+        // on background assignment and pressed-state updates. Appearance comes from Edit.
+        search = new ImageButton(context, null, 0);
         TypedArray colors = context.obtainStyledAttributes(new int[]{android.R.attr.textColorPrimary});
         int color;
         try { color = colors.getColor(0, 0xffdadce0); } finally { colors.recycle(); }

@@ -208,6 +208,14 @@ public class ClipboardSearchUiAdapterTest {
         int center = bitmap.getPixel(24, 24);
         assertTrue(android.graphics.Color.alpha(center) < 200);
         assertEquals(0x5f, android.graphics.Color.red(center), 2);
+        ui.search.setPressed(true); ui.search.refreshDrawableState();
+        bitmap.eraseColor(android.graphics.Color.TRANSPARENT);
+        ui.search.getBackground().draw(new android.graphics.Canvas(bitmap));
+        assertEquals(center, bitmap.getPixel(24, 24));
+        ui.search.setPressed(false); ui.search.refreshDrawableState();
+        bitmap.eraseColor(android.graphics.Color.TRANSPARENT);
+        ui.search.getBackground().draw(new android.graphics.Canvas(bitmap));
+        assertEquals(center, bitmap.getPixel(24, 24));
         bitmap.recycle(); ui.close();
     }
 

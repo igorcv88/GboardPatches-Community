@@ -168,3 +168,7 @@ The graphics test also catches assignment order: ImageButton.setBackground reapp
 its cleared framework tint through InsetDrawable, removing a previously copied tint.
 Apply the native tint after assigning the background, with explicit native View tint
 precedence over a drawable filter. This keeps the copied circle translucent.
+
+The search host is constructed with defStyleAttr=0 rather than imageButtonStyle,
+so framework tint bookkeeping cannot reset the native tint during pressed-state
+updates. The render regression also checks the circle after press and release.
