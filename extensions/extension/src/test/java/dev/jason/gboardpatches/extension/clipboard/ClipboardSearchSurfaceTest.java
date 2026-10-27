@@ -86,17 +86,29 @@ public class ClipboardSearchSurfaceTest {
         surface.measure(View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY));
         surface.layout(0, 0, 600, 400);
+        Object viewRoot = org.robolectric.util.ReflectionHelpers.callInstanceMethod(surface, "getViewRootImpl");
+        org.robolectric.util.ReflectionHelpers.callInstanceMethod(viewRoot, "ensureTouchMode",
+                org.robolectric.util.ReflectionHelpers.ClassParameter.from(boolean.class, true));
         // AbsListView.WindowRunnable rejects clicks when the test window lacks focus.
         controller.windowFocusChanged(true);
         assertTrue(surface.hasWindowFocus());
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
         View row = surface.results.getChildAt(0);
         assertNotNull(row);
-        float x = 300, y = surface.results.getTop() + row.getTop() + row.getHeight() / 2f;
+        android.graphics.Rect rowBounds = new android.graphics.Rect(0, 0, row.getWidth(), row.getHeight());
+        surface.offsetDescendantRectToMyCoords(row, rowBounds);
+        float x = rowBounds.centerX(), y = rowBounds.centerY();
+        assertEquals(0, surface.results.pointToPosition((int) x - surface.results.getLeft(),
+                (int) y - surface.results.getTop()));
         touch(surface, 0, 0, 0, x, y);
+        int downPosition = org.robolectric.util.ReflectionHelpers.getField(surface.results, "mMotionPosition");
+        int downMode = org.robolectric.util.ReflectionHelpers.getField(surface.results, "mTouchMode");
         touch(surface, 0, 50, 1, x, y);
         // AbsListView delays PerformClick by the framework pressed-state duration.
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100));
-        assertEquals(List.of(clips.get(0)), picked);
+        assertEquals("position=" + downPosition + " mode=" + downMode
+                + " focused=" + surface.hasWindowFocus() + " touch=" + surface.isInTouchMode(),
+                List.of(clips.get(0)), picked);
         int before = surface.results.getChildAt(0).getTop();
         float bottom = surface.results.getBottom() - 20;
         touch(surface, 100, 100, 0, x, bottom);
