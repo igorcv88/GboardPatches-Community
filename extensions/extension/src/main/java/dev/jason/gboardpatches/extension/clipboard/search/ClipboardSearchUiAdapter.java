@@ -87,6 +87,8 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
         }
         int foreground = ((SearchIcon) search.getDrawable()).foreground();
         int state = 31 * (source == null ? 0 : java.util.Arrays.hashCode(backgroundView.getDrawableState())) + foreground;
+        if (source != null) state = 31 * state + source.getAlpha()
+                + Float.floatToIntBits(relativeAlpha(backgroundView, peer));
         if (nativeBackground == source && backgroundBounds.equals(relative)
                 && backgroundWidth == peer.getWidth() && backgroundHeight == peer.getHeight()
                 && backgroundState == state && search.getBackground() != null) return;
@@ -95,7 +97,9 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
         Drawable copy = null;
         if (source != null && source.getConstantState() != null) {
             copy = source.getConstantState().newDrawable(search.getResources()).mutate();
-            copy.setState(backgroundView.getDrawableState()); copy.setAlpha(source.getAlpha());
+            copy.setState(search.getDrawableState());
+            copy.setLevel(source.getLevel());
+            copy.setAlpha(Math.round(source.getAlpha() * relativeAlpha(backgroundView, peer)));
         }
         if (copy == null) {
             android.graphics.drawable.GradientDrawable circle = new android.graphics.drawable.GradientDrawable();
@@ -117,13 +121,33 @@ public final class ClipboardSearchUiAdapter implements AutoCloseable {
                 if (backgroundView.getBackgroundTintMode() != null) copy.setTintMode(backgroundView.getBackgroundTintMode());
             } else if (source.getColorFilter() != null) copy.setColorFilter(source.getColorFilter());
         }
-        Drawable foregroundDrawable = backgroundView == null ? null : backgroundView.getForeground();
-        if (foregroundDrawable == null) foregroundDrawable = peer.getForeground();
+        View foregroundOwner = backgroundView;
+        Drawable foregroundDrawable = foregroundOwner == null ? null : foregroundOwner.getForeground();
+        if (foregroundDrawable == null) { foregroundOwner = peer; foregroundDrawable = peer.getForeground(); }
         if (foregroundDrawable != null && foregroundDrawable.getConstantState() != null) {
-            search.setForeground(foregroundDrawable.getConstantState().newDrawable(search.getResources()).mutate());
+            Drawable overlay = foregroundDrawable.getConstantState().newDrawable(search.getResources()).mutate();
+            search.setForeground(overlay);
+            // ConstantState does not retain runtime alpha/filter. A transparent white native
+            // highlight otherwise becomes opaque and covers the lens (and all background).
+            overlay.setState(search.getDrawableState()); overlay.setLevel(foregroundDrawable.getLevel());
+            overlay.setAlpha(Math.round(foregroundDrawable.getAlpha() * relativeAlpha(foregroundOwner, peer)));
+            if (foregroundOwner.getForegroundTintList() != null) {
+                overlay.setTintList(foregroundOwner.getForegroundTintList());
+                if (foregroundOwner.getForegroundTintMode() != null) overlay.setTintMode(foregroundOwner.getForegroundTintMode());
+            } else if (foregroundDrawable.getColorFilter() != null) overlay.setColorFilter(foregroundDrawable.getColorFilter());
         } else search.setForeground(null);
         search.setPadding(Math.max(0, relative.left), Math.max(0, relative.top),
                 Math.max(0, peer.getWidth() - relative.right), Math.max(0, peer.getHeight() - relative.bottom));
+    }
+
+    private static float relativeAlpha(View view, View peer) {
+        float alpha = 1f;
+        for (View current = view; current != null; ) {
+            alpha *= current.getAlpha();
+            if (current == peer || !(current.getParent() instanceof View parent)) break;
+            current = parent;
+        }
+        return alpha;
     }
 
     private View findBackground(View view) {

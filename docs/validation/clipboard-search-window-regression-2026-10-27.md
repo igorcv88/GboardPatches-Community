@@ -80,3 +80,16 @@ Back/provider isolation, pick and clipboard/history checks remain required.
 Physical acceptance remains pending: QWERTY below results; filtering and no query
 text in the host app; Back; repeated open/close/hide/reopen; native clipboard controls;
 clipboard contents/history preserved; search button skin on the actual theme.
+
+
+## Native control appearance (separate stage)
+
+The search host remains unstyled and uses the Edit control's background and native
+press foreground. Foreground ConstantState clones previously lost runtime alpha,
+filter and tint: a transparent white highlight could cover the entire lens as an
+opaque circle. Copies now retain those properties, level and search-owned state.
+Native content/peer alpha is included in copied backgrounds. Native originals are
+never modified. The new graphics test draws the whole ImageButton, not just its
+background: it requires a translucent backdrop and visible white lens with a
+transparent white native foreground. This addresses a concrete cloning defect;
+exact visual equality on the user's custom theme still needs the device retest.

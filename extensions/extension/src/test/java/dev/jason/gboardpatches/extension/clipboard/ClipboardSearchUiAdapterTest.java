@@ -219,4 +219,31 @@ public class ClipboardSearchUiAdapterTest {
         bitmap.recycle(); ui.close();
     }
 
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void aTransparentWhiteNativeForegroundMustNotBecomeAnOpaqueCircleOverTheLens() {
+        ClipboardSearchUiAdapter ui = fixture();
+        android.widget.ImageView edit = new android.widget.ImageView(actions.getContext()); edit.setId(0x7f0b0526);
+        android.graphics.drawable.GradientDrawable background = new android.graphics.drawable.GradientDrawable();
+        background.setShape(android.graphics.drawable.GradientDrawable.OVAL); background.setColor(0xff5f6368);
+        background.setAlpha(102); edit.setBackground(background); edit.setAlpha(0.5f);
+        android.graphics.drawable.GradientDrawable highlight = new android.graphics.drawable.GradientDrawable();
+        highlight.setShape(android.graphics.drawable.GradientDrawable.OVAL); highlight.setColor(android.graphics.Color.WHITE);
+        highlight.setAlpha(0); edit.setForeground(highlight);
+        edit.setImageTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE));
+        actions.addView(edit); edit.layout(160, 0, 208, 48); ui.alignToPeers();
+        assertEquals(0, ui.search.getForeground().getAlpha());
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888);
+        ui.search.draw(new android.graphics.Canvas(bitmap));
+        int centerAlpha = android.graphics.Color.alpha(bitmap.getPixel(24, 24));
+        assertTrue("native gray backdrop is translucent", centerAlpha < 150);
+        int lens = 0;
+        for (int y = 0; y < 48; y++) for (int x = 0; x < 48; x++) {
+            int pixel = bitmap.getPixel(x, y);
+            if (android.graphics.Color.alpha(pixel) > 200 && android.graphics.Color.red(pixel) > 230) lens++;
+        }
+        assertTrue("white lens is visible above the native backdrop", lens > 5);
+        assertEquals(0, highlight.getAlpha()); assertEquals(102, background.getAlpha()); // Native controls untouched.
+        bitmap.recycle(); ui.close();
+    }
+
 }
