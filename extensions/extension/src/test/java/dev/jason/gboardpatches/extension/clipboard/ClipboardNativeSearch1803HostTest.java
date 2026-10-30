@@ -271,6 +271,42 @@ public class ClipboardNativeSearch1803HostTest {
         assertEquals(List.of("surface", "alphabet", "route", "restore", "hide", "clipboard"), host.calls);
     }
 
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void touchRegionIsConfirmedOnlyAfterAVisibleSearchPanelIsIncludedAndResetsOnClose() throws Exception {
+        Service service = Robolectric.setupService(Service.class);
+        FakeHost host = new FakeHost();
+        assertTrue(ClipboardNativeSearch1803.start(service, new Field(service), List.of(), host));
+        java.lang.reflect.Field member = ClipboardNativeSearch1803.class.getDeclaredField("surface");
+        member.setAccessible(true);
+        View panel = (View) member.get(null);
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        FrameLayout root = new FrameLayout(activity);
+        root.addView(panel, new FrameLayout.LayoutParams(1080, 600));
+        activity.setContentView(root);
+        root.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(1600, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, 1080, 1600);
+        View decor = panel.getRootView();
+        decor.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(1600, View.MeasureSpec.EXACTLY));
+        decor.layout(0, 0, 1080, 1600);
+        InputMethodService.Insets insets = new InputMethodService.Insets();
+        insets.touchableInsets = InputMethodService.Insets.TOUCHABLE_INSETS_REGION;
+        insets.touchableRegion.set(0, 600, 1080, 1600);
+        insets.visibleTopInsets = 600;
+        assertFalse(ClipboardNativeSearch1803.touchRegionComputedFor(panel));
+        panel.setAlpha(0f);
+        ClipboardNativeSearch1803.beforeComputeInsets(insets);
+        ClipboardNativeSearch1803.afterComputeInsets();
+        assertFalse(ClipboardNativeSearch1803.touchRegionComputedFor(panel));
+        panel.setAlpha(1f);
+        ClipboardNativeSearch1803.beforeComputeInsets(insets);
+        ClipboardNativeSearch1803.afterComputeInsets();
+        assertTrue(ClipboardNativeSearch1803.touchRegionComputedFor(panel));
+        ClipboardNativeSearch1803.end();
+        assertFalse(ClipboardNativeSearch1803.touchRegionComputedFor(panel));
+    }
+
     @Test public void failedStartRestoresRoutingAndLeavesNoSurfaceOrSession() {
         Service service = Robolectric.setupService(Service.class);
         Field field = new Field(service);

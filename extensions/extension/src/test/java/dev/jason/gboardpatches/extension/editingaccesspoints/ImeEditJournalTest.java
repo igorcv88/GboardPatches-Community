@@ -60,12 +60,32 @@ public class ImeEditJournalTest {
         edit(journal, s("", 0), s("hi", 2), 0);
         assertTrue(journal.canUndo(s("hi", 2)));
         assertFalse(journal.canUndo(s("hi!", 3)));      // App changed the text.
-        assertNull(journal.peekUndo(s("hi", 0)));        // Cursor moved externally.
+        assertNotNull(journal.peekUndo(s("hi", 0)));    // Caret movement does not alter text.
         journal.beforeEdit(s("hi!", 3));
         journal.afterEdit(s("hi!x", 4), 1);
         assertEquals(1, journal.undoSize());
         ImeEditJournal.State current = s("hi!x", 4);
         assertEquals("hi!", ImeEditJournal.target(current, journal.peekUndo(current), true).text);
+    }
+
+    @Test public void pasteStartsItsOwnStepAndCursorMovementKeepsOlderUndoAvailable() {
+        ImeEditJournal journal = new ImeEditJournal();
+        edit(journal, s("", 0), s("a", 1), 1);
+        assertTrue(journal.recordObserved(s("a", 1), s("aPASTE", 6), 2));
+        assertEquals(2, journal.undoSize());
+        ImeEditJournal.State moved = s("aPASTE", 0);
+        ImeEditJournal.Edit paste = journal.peekUndo(moved);
+        ImeEditJournal.State unpasted = ImeEditJournal.target(moved, paste, true);
+        assertEquals("a", unpasted.text);
+        assertTrue(journal.applied(paste, true, unpasted, unpasted));
+        assertEquals("", ImeEditJournal.target(unpasted, journal.peekUndo(unpasted), true).text);
+    }
+
+    @Test public void sameObservedPasteIsNotAddedTwice() {
+        ImeEditJournal journal = new ImeEditJournal();
+        edit(journal, s("", 0), s("pasted", 6), 1);
+        assertTrue(journal.recordObserved(s("", 0), s("pasted", 6), 2));
+        assertEquals(1, journal.undoSize());
     }
 
     @Test public void unreadableEditorAndMismatchedResultClearHistory() {

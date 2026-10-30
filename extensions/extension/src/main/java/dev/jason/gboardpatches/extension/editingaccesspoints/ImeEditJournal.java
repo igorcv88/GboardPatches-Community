@@ -55,7 +55,8 @@ public final class ImeEditJournal {
     public void beforeEdit(State current) {
         if (pendingBase != null) return; // Nested batch: the outer base stays authoritative.
         if (current == null) { clear(); return; }
-        if (recorded != null && !recorded.same(current)) clear();
+        if (recorded != null && !recorded.text.equals(current.text)) clear();
+        else if (recorded != null && !recorded.same(current)) breakGroup();
         pendingBase = current;
     }
 
@@ -84,8 +85,37 @@ public final class ImeEditJournal {
     /** Next keyboard edit starts a new undo step (for example after an undo/redo or a cursor move). */
     public void breakGroup() { groupBreak = true; }
 
-    public boolean canUndo(State current) { return !undo.isEmpty() && recorded != null && recorded.same(current); }
-    public boolean canRedo(State current) { return !redo.isEmpty() && recorded != null && recorded.same(current); }
+    // Moving the caret is not an edit. Verify the complete text before touching a known range;
+    // undo restores that step's own selection, regardless of the current caret position.
+    public boolean canUndo(State current) { return !undo.isEmpty() && matchesText(current); }
+    public boolean canRedo(State current) { return !redo.isEmpty() && matchesText(current); }
+
+    private boolean matchesText(State current) {
+        return current != null && recorded != null && recorded.text.equals(current.text);
+    }
+
+    /** Whether this editor state belongs to a still-live local undo/redo chain. */
+    public boolean owns(State current) {
+        return matchesText(current) && (!undo.isEmpty() || !redo.isEmpty());
+    }
+
+    /**
+     * Include a separately verified paste/cut in the same history as keyboard typing.
+     * The operation is always an independent step, even when it immediately follows a word.
+     * A paste which the wrapper already recorded must never appear twice.
+     */
+    public boolean recordObserved(State before, State after, long now) {
+        if (before == null || after == null || before.text.equals(after.text)
+                || pendingBase != null) return false;
+        Edit last = undo.peekLast();
+        if (recorded != null && recorded.same(after) && last != null
+                && target(after, last, true).same(before)) return true;
+        breakGroup();
+        beforeEdit(before);
+        afterEdit(after, now);
+        breakGroup();
+        return canUndo(after);
+    }
 
     /** Edit to reverse, or null. The caller must apply it and then call {@link #applied}. */
     public Edit peekUndo(State current) { return canUndo(current) ? undo.peekLast() : null; }

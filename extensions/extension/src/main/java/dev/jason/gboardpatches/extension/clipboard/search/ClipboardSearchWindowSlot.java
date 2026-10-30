@@ -102,13 +102,33 @@ final class ClipboardSearchWindowSlot implements AutoCloseable {
         if (anchorState == Anchor.WAITING_FOR_KEYBOARD && keyboard() != null && placed) {
             anchorState = Anchor.ANCHORED;
             owned.setAlpha(1f);
-            // onComputeInsets may have run while alpha was zero. Schedule a traversal
-            // after anchoring, even when no more geometry changes are necessary.
-            owned.getRootView().requestLayout();
-            owned.requestApplyInsets();
+            // onComputeInsets commonly runs while alpha is zero (during the keyboard
+            // switch). A layout request made synchronously in OnPreDraw can be coalesced
+            // into the traversal already underway. Request again on subsequent frames,
+            // bounded by successful touch-region computation or four frames.
+            requestTouchRegion(0);
             ClipboardSearchDiagnostics.anchor(owned);
         }
         return true;
+    }
+
+    private void requestTouchRegion(int attempt) {
+        View panel = owned;
+        if (closed || anchorState != Anchor.ANCHORED || panel == null || !panel.isAttachedToWindow()) return;
+        if (ClipboardNativeSearch1803.touchRegionComputedFor(panel)) return;
+        panel.getRootView().requestLayout();
+        panel.requestApplyInsets();
+        ClipboardSearchDiagnostics.state("touch-region-request attempt=" + attempt);
+        if (attempt < 3) {
+            panel.postOnAnimation(() -> {
+                if (owned == panel) requestTouchRegion(attempt + 1);
+            });
+        } else {
+            panel.postOnAnimation(() -> {
+                if (owned == panel && !ClipboardNativeSearch1803.touchRegionComputedFor(panel))
+                    ClipboardSearchDiagnostics.state("touch-region-not-computed-after-retries");
+            });
+        }
     }
 
     /**

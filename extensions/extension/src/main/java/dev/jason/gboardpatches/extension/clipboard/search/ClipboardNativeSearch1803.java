@@ -64,6 +64,7 @@ public final class ClipboardNativeSearch1803 {
 
     private static ClipboardNativeSearchSession active;
     private static ClipboardSearchSurface surface;
+    private static View publishedTouchRegionFor;
     private static boolean opening, endRequested;
     private static InputMethodService.Insets computing;
     private ClipboardNativeSearch1803() {}
@@ -205,7 +206,10 @@ public final class ClipboardNativeSearch1803 {
      * Content insets are not changed, so the editor is not resized behind the surface.
      */
     public static void beforeComputeInsets(Object value) {
-        if (main()) computing = value instanceof InputMethodService.Insets insets ? insets : null;
+        if (!main()) return;
+        computing = value instanceof InputMethodService.Insets insets ? insets : null;
+        if (isOpen()) ClipboardSearchDiagnostics.state("insets-enter valid=" + (computing != null)
+                + " panel=" + (surface != null) + " shown=" + (surface != null && visible(surface)));
     }
 
     public static void afterComputeInsets() {
@@ -224,8 +228,16 @@ public final class ClipboardNativeSearch1803 {
             ClipboardSearchDiagnostics.insets("native", insets, rect);
             apply(insets, rect, window);
             ClipboardSearchDiagnostics.insets("union", insets, rect);
+            if (insets.touchableInsets == InputMethodService.Insets.TOUCHABLE_INSETS_REGION
+                    && insets.touchableRegion.contains(rect.centerX(), rect.centerY())) {
+                publishedTouchRegionFor = current;
+                ClipboardSearchDiagnostics.state("touch-region-computed-for-panel");
+            }
         } catch (Throwable failure) { report("insets", failure); }
     }
+
+    /** Whether the native onComputeInsets callback has incorporated this exact panel. */
+    static boolean touchRegionComputedFor(View panel) { return panel != null && publishedTouchRegionFor == panel; }
 
     static void apply(InputMethodService.Insets insets, Rect surfaceRect, Rect window) {
         if (window.isEmpty() || surfaceRect.isEmpty()) return;
@@ -272,6 +284,7 @@ public final class ClipboardNativeSearch1803 {
 
     private static void finish() {
         active = null;
+        publishedTouchRegionFor = null;
         ClipboardSearchSurface current = surface;
         surface = null;
         if (current != null) current.close();

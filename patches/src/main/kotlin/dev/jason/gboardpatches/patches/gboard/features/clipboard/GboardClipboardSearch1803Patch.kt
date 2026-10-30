@@ -5,12 +5,18 @@ import app.morphe.patcher.patch.bytecodePatch
 import dev.jason.gboardpatches.patches.gboard.shared.applyVoidExitLifecycleDelegate
 import dev.jason.gboardpatches.patches.gboard.shared.findMutableMethodOrThrow
 import dev.jason.gboardpatches.patches.gboard.shared.isMethodReference
+import dev.jason.gboardpatches.patches.gboard.shared.mutableClass
 import dev.jason.gboardpatches.patches.gboard.shared.runtimeabi.RuntimeCallEmitter
 import dev.jason.gboardpatches.patches.gboard.shared.runtimeabi.RuntimeCallId
 import dev.jason.gboardpatches.patches.shared.Constants.COMPATIBILITY_GBOARD
 
 /** Reviewed 18.0.3 InputMethodService owner (same target as the editing lifecycle). */
 private const val INPUT_METHOD_SERVICE_OWNER = "Loup;"
+// The receiver is LatinIME -> Leqy -> Loup. Calling the Loup implementation is not
+// guaranteed if a more derived class overrides the callback on a compatible APK.
+private val INSETS_DISPATCH_OWNERS = listOf(
+    "Lcom/google/android/apps/inputmethod/latin/LatinIME;", "Leqy;", INPUT_METHOD_SERVICE_OWNER,
+)
 
 internal val gboardClipboardSearch1803Patch = bytecodePatch(
     description = "Clipboard search on the native alphabet keyboard with results above it.",
@@ -99,13 +105,18 @@ internal val gboardClipboardSearch1803Patch = bytecodePatch(
                 }
             }
         }
-        // Loup declares its own onComputeInsets (0x2ed414). The Insets object is captured at
-        // entry, where p1 is guaranteed to hold it; exits call without registers, so no
-        // parameter register reused by the method body is ever read by the delegate.
-        val insets = findMutableMethodOrThrow(
-            INPUT_METHOD_SERVICE_OWNER, "onComputeInsets", "V",
-            listOf("Landroid/inputmethodservice/InputMethodService\$Insets;"),
-        )
+        // Patch the *virtual dispatch winner*, not an assumed superclass. If a subclass
+        // overrides onComputeInsets without calling Loup, the old hook never runs and the
+        // search panel is drawn outside the touchable IME window (taps reach the editor).
+        // On the exact 18.0.3 target Loup is known to declare the method; subclasses are
+        // checked defensively and the most-derived declaration wins.
+        val insetsParameters = listOf("Landroid/inputmethodservice/InputMethodService\$Insets;")
+        val insets = INSETS_DISPATCH_OWNERS.firstNotNullOfOrNull { owner ->
+            runCatching { mutableClass(owner) }.getOrNull()?.methods?.firstOrNull {
+                it.name == "onComputeInsets" && it.returnType == "V" && it.parameterTypes == insetsParameters
+                        && it.implementation != null
+            }
+        } ?: error("Missing 18.0.3 onComputeInsets dispatch target")
         val begin = RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_INSETS_BEGIN
         val begins = insets.implementation!!.instructions.count { it.isMethodReference(begin.encodedAbi) }
         check(begins <= 1) { "Duplicate clipboard search insets capture" }
