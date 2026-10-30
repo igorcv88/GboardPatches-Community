@@ -3,6 +3,7 @@ package dev.jason.gboardpatches.patches.gboard.features.clipboard
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.patch.bytecodePatch
 import dev.jason.gboardpatches.patches.gboard.shared.applyVoidExitLifecycleDelegate
+import dev.jason.gboardpatches.patches.gboard.shared.applyVoidExitTargetSafeDelegate
 import dev.jason.gboardpatches.patches.gboard.shared.findMutableMethodOrThrow
 import dev.jason.gboardpatches.patches.gboard.shared.isMethodReference
 import dev.jason.gboardpatches.patches.gboard.shared.mutableClass
@@ -125,8 +126,16 @@ internal val gboardClipboardSearch1803Patch = bytecodePatch(
         // Force the /range encoding so the Morphe inline Smali compiler accepts it.
         if (begins == 0) insets.addInstructions(0, RuntimeCallEmitter.invoke(begin, "p1 .. p1"))
         else check(insets.implementation!!.instructions.first().isMethodReference(begin.encodedAbi))
+        // The original Gboard control flow jumps DIRECTLY to RETURN_VOID, including
+        // the fast-path equality check. Inserting a delegate *before* RETURN_VOID
+        // leaves those branches pointing at RETURN_VOID and bypassing our delegate.
+        // Replace each branch-target return with NOP, and put delegate+return AFTER it.
+        // Every predecessor (fallthrough, goto or conditional jump) must now cross NOP
+        // and the delegate, while retaining its exact original target location.
         // p1 is v20 on this APK. Unlike v1 (overwritten by native logging), it is
         // preserved across both native return paths; /range handles the high register.
-        insets.applyVoidExitLifecycleDelegate(RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_INSETS, "p1 .. p1")
+        insets.applyVoidExitTargetSafeDelegate(
+            RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_INSETS, "p1 .. p1", expectedReturns = 2,
+        )
     }
 }
