@@ -66,7 +66,7 @@ public final class ClipboardNativeSearch1803 {
     private static ClipboardSearchSurface surface;
     private static View publishedTouchRegionFor;
     private static boolean opening, endRequested;
-    private static InputMethodService.Insets computing;
+    private static String lastInsetsExitState;
     private ClipboardNativeSearch1803() {}
 
     public static boolean available() {
@@ -207,17 +207,29 @@ public final class ClipboardNativeSearch1803 {
      */
     public static void beforeComputeInsets(Object value) {
         if (!main()) return;
-        computing = value instanceof InputMethodService.Insets insets ? insets : null;
-        if (isOpen()) ClipboardSearchDiagnostics.state("insets-enter valid=" + (computing != null)
+        if (isOpen()) ClipboardSearchDiagnostics.state("insets-enter valid=" + (value instanceof InputMethodService.Insets)
                 + " panel=" + (surface != null) + " shown=" + (surface != null && visible(surface)));
     }
 
-    public static void afterComputeInsets() {
-        InputMethodService.Insets insets = computing;
-        computing = null;
+    /**
+     * Receives Loup.onComputeInsets' unchanged p1 directly at each RETURN_VOID.
+     * The previous static handoff lost the object if another onComputeInsets occurred
+     * before the matching exit, producing a visible but click-through candidates panel.
+     */
+    public static void afterComputeInsets(Object value) {
         try {
-            if (!main() || !isOpen() || insets == null) return;
+            if (!main()) return;
+            InputMethodService.Insets insets = value instanceof InputMethodService.Insets i ? i : null;
             ClipboardSearchSurface current = surface;
+            if (current != null) {
+                String state = "insets-exit open=" + isOpen() + " valid=" + (insets != null)
+                        + " visible=" + visible(current);
+                if (!state.equals(lastInsetsExitState)) {
+                    lastInsetsExitState = state;
+                    ClipboardSearchDiagnostics.state(state);
+                }
+            }
+            if (!isOpen() || insets == null) return;
             if (current == null || !visible(current)) return; // Unanchored: nothing to touch.
             int[] location = new int[2];
             current.getLocationInWindow(location);
@@ -284,6 +296,7 @@ public final class ClipboardNativeSearch1803 {
 
     private static void finish() {
         active = null;
+        lastInsetsExitState = null;
         publishedTouchRegionFor = null;
         ClipboardSearchSurface current = surface;
         surface = null;

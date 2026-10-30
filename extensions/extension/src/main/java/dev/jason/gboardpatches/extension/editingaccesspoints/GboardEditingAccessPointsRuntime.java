@@ -148,6 +148,17 @@ public final class GboardEditingAccessPointsRuntime {
             // Stock AP clicks are synchronous UI callbacks. Do not queue stale edits.
             if (Looper.myLooper() == Looper.getMainLooper() && enabled(service.get(), action)) {
                 boolean applied = SESSION.execute(action);
+                if (!applied && (action == EditorAction.UNDO || action == EditorAction.REDO)) {
+                    // The stock Gboard button can undo a paste even when the editor rejects
+                    // android.R.id.undo. Forward the conventional keyboard shortcut as the
+                    // host-owned fallback; never replay snapshots of unverified text.
+                    InputMethodService current = service.get();
+                    android.view.inputmethod.InputConnection connection = current == null
+                            ? null : JournalingInputConnection.unwrap(current.getCurrentInputConnection());
+                    applied = HostHistoryShortcuts.send(connection, action);
+                    android.util.Log.i("GboardHistory", "action=" + action
+                            + " route=host-shortcut accepted=" + applied);
+                }
                 if (applied && (action == EditorAction.UNDO || action == EditorAction.REDO)) {
                     dev.jason.gboardpatches.extension.quicktoolbar.QuickToolbar1803Runtime
                             .afterSuccessfulHistoryAction();

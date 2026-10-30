@@ -105,7 +105,7 @@ public class ClipboardNativeSearch1803HostTest {
         assertEquals(new Rect(0, 500, 1080, 1600), visible.touchableRegion.getBounds());
 
         ClipboardNativeSearch1803.beforeComputeInsets(visible);
-        ClipboardNativeSearch1803.afterComputeInsets(); // No open search: untouched.
+        ClipboardNativeSearch1803.afterComputeInsets(visible); // No open search: untouched.
         assertEquals(500, visible.visibleTopInsets);
     }
 
@@ -262,7 +262,7 @@ public class ClipboardNativeSearch1803HostTest {
         insets.touchableInsets = InputMethodService.Insets.TOUCHABLE_INSETS_REGION;
         insets.touchableRegion.set(0, 900, 1080, 1600); insets.visibleTopInsets = 900;
         ClipboardNativeSearch1803.beforeComputeInsets(insets);
-        ClipboardNativeSearch1803.afterComputeInsets();
+        ClipboardNativeSearch1803.afterComputeInsets(insets);
         assertEquals(new Rect(0, 900, 1080, 1600), insets.touchableRegion.getBounds()); // Not touchable.
         assertEquals(900, insets.visibleTopInsets);
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
@@ -297,11 +297,13 @@ public class ClipboardNativeSearch1803HostTest {
         assertFalse(ClipboardNativeSearch1803.touchRegionComputedFor(panel));
         panel.setAlpha(0f);
         ClipboardNativeSearch1803.beforeComputeInsets(insets);
-        ClipboardNativeSearch1803.afterComputeInsets();
+        ClipboardNativeSearch1803.afterComputeInsets(insets);
         assertFalse(ClipboardNativeSearch1803.touchRegionComputedFor(panel));
         panel.setAlpha(1f);
-        ClipboardNativeSearch1803.beforeComputeInsets(insets);
-        ClipboardNativeSearch1803.afterComputeInsets();
+        // Nested framework calculation used to overwrite the static entry-to-exit
+        // handoff. The hook must mutate the actual value from this callback's p1.
+        ClipboardNativeSearch1803.beforeComputeInsets(new InputMethodService.Insets());
+        ClipboardNativeSearch1803.afterComputeInsets(insets);
         assertTrue(ClipboardNativeSearch1803.touchRegionComputedFor(panel));
         ClipboardNativeSearch1803.end();
         assertFalse(ClipboardNativeSearch1803.touchRegionComputedFor(panel));
