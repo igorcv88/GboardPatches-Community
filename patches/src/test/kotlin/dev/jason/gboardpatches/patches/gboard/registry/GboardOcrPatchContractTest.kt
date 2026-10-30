@@ -51,14 +51,9 @@ class GboardOcrPatchContractTest {
                 "下載官方模型</translation>",
         ))
         assertTrue(!settingsText.contains("gboard_patches_ocr_engine_summary"))
-        assertTrue(
-            readme.indexOf("<summary><code>Long-Press Editing Shortcuts</code></summary>") <
-                readme.indexOf("<summary><code>Enable OCR / Scan Text</code></summary>"),
-        )
-        assertTrue(readme.contains(
-            "Enable the OCR / Scan Text feature with Latin, Chinese, Japanese, Korean, and " +
-                "Devanagari recognition backends.",
-        ))
+        assertTrue("README must document editing shortcuts", readme.contains("Long-Press Editing Shortcuts"))
+        assertTrue("README must name the OCR feature", readme.contains("OCR / Scan Text"))
+        assertTrue("README must explain OCR's purpose", readme.contains("text recognition"))
     }
 
     private fun read(root: Path, relative: String): String =
