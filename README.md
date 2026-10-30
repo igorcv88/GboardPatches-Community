@@ -65,6 +65,7 @@ These patches add functionality beyond simply turning on a hidden Gboard flag. S
   - **Clipboard Search:** the search panel stays above the keyboard and filters the existing clipboard history without replacing the normal keyboard. It is part of the Clipboard Enhancements patch.
   - **Toolbar Editing Buttons:** enable Select All, Undo, Copy, Cut, Paste, and Redo in the access-point toolbar; organize the available actions in Gboard's toolbar UI.
   - **Long-Press Editing Shortcuts:** add direct shortcuts for common text-editing operations to supported alphabet keyboard layouts.
+  - **Latin Globe Key Ignore Interval:** independently adjust the post-typing language-switch delay of the English keyboard's globe key.
   - **Swipeable Custom Top Row:** swipe horizontally to alternate between the normal first row and user-configured text or JavaScript actions.
   - **Simple Calculator:** type an arithmetic expression and see the result in the suggestion strip; tap to insert or long-press to copy.
 </details>
@@ -91,6 +92,8 @@ These patches expose existing Gboard behaviors, settings or rollout gates. Some 
 | **Typing & accessibility** | Cursor Trackpad and lock mode, Split Keyboard, Accessibility Layout, Hyperspeed Typing Animation. |
 | **Appearance & controls** | Emoji Size, Key Shape Selection, Access Points Menu Style, Settings Homepage Override. |
 | **Advanced options** | Developer Options and Flag Editor, Package Rename with custom display name, Gboard Signature Bypass. |
+
+The Bluetooth microphone switch is under **Voice typing → Use Bluetooth microphone**. **OCR / Scan Text** exposes text recognition; available models and backends depend on the Gboard build and Google Play services.
 
 The included patch names, default selections, and compatibility targets are defined by the [published patch registry](patches/src/main/kotlin/dev/jason/gboardpatches/patches/gboard/registry/GboardPatchRegistry.kt). Not every patch must be enabled; choose the functionality you want when building the APK.
 

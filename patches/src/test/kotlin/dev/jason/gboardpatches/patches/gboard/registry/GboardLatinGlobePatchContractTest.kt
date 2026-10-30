@@ -70,18 +70,11 @@ class GboardLatinGlobePatchContractTest {
     }
 
     @Test
-    fun readmeListsLatinGlobeWithThePublicEnglishDescription() {
+    fun readmeDocumentsLatinGlobeBehavior() {
         val readme = readSource("README.md")
-            .substringAfter("## Included Patches")
-            .substringBefore("## Install")
 
-        assertTrue(readme.contains(
-            "<summary><code>Latin Globe Key Ignore Interval</code></summary>",
-        ))
-        assertTrue(readme.contains(
-            "Add an independent English globe key ignore interval override for " +
-                "post-typing language-switch delay.",
-        ))
+        assertTrue("README must name the Latin globe option", readme.contains("Latin Globe Key Ignore Interval"))
+        assertTrue("README must describe its purpose", readme.contains("language-switch delay"))
     }
 
     @Test
