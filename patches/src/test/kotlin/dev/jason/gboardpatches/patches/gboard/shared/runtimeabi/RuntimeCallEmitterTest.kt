@@ -49,8 +49,9 @@ class RuntimeCallEmitterTest {
         )
         val exit = method.implementation!!.instructions[1]
         assertEquals(Opcode.INVOKE_STATIC_RANGE, exit.opcode)
-        assertEquals(20, (exit as RegisterRangeInstruction).startRegister)
-        assertEquals(1, exit.registerCount)
+        val exitRange = exit as RegisterRangeInstruction
+        assertEquals(20, exitRange.startRegister)
+        assertEquals(1, exitRange.registerCount)
     }
 
     @Test
