@@ -12,6 +12,18 @@ keeping the framework's native region and adding only the bounded visible
 search panel. A deduplicated `insets-exit` diagnostic distinguishes failure of
 the guard from failure of the invocation. Nothing logs clipboard contents.
 
+## Device finding after the first follow-up build
+
+The Galaxy confirms **Undo works**, but search still passes touches through.
+Numerous `insets-enter ... shown=true` entries occurred without one `insets-exit`.
+The inspected Gboard method has an equality fast path that branches directly
+to its original `RETURN_VOID`. The original patch injected the exit delegate
+*before* that instruction, so the branch target skipped the delegate entirely.
+The targeted return is now replaced by a `nop`, followed by delegate and
+replacement `return-void`: both fallthrough and native branches go through
+the same touchable-region calculation. The branch-to-return behavior has a
+dedicated bytecode regression test.
+
 The stock Gboard Undo successfully reverses a paste but the custom Access Point
 does not. As a compatibility fallback after bounded journal/transaction paths
 fail, the custom button now sends Ctrl+Z to the host editor (and Ctrl+Shift+Z

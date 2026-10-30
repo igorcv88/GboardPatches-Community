@@ -5,15 +5,48 @@ import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod.Companion.toMuta
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.OffsetInstruction
+import com.android.tools.smali.dexlib2.immutable.instruction.ImmutableInstruction21t
 import com.android.tools.smali.dexlib2.immutable.ImmutableMethod
 import com.android.tools.smali.dexlib2.immutable.ImmutableMethodImplementation
 import com.android.tools.smali.dexlib2.immutable.ImmutableMethodParameter
 import com.android.tools.smali.dexlib2.immutable.instruction.ImmutableInstruction10x
+import dev.jason.gboardpatches.patches.gboard.shared.applyVoidExitTargetSafeDelegate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class RuntimeCallEmitterTest {
+    @Test
+    fun `insets exit delegate stays reachable through branch to native return`() {
+        // In the device DEX, if-eq and goto can target RETURN_VOID itself.
+        // A delegate inserted before RETURN_VOID would be skipped.
+        val method = ImmutableMethod(
+            "Loup;", "onComputeInsets",
+            listOf(ImmutableMethodParameter(
+                "Landroid/inputmethodservice/InputMethodService\$Insets;", emptySet(), null,
+            )),
+            "V", AccessFlags.PUBLIC.value, emptySet(), emptySet(),
+            ImmutableMethodImplementation(
+                21,
+                listOf(
+                    ImmutableInstruction21t(Opcode.IF_EQZ, 0, 3),
+                    ImmutableInstruction10x(Opcode.NOP),
+                    ImmutableInstruction10x(Opcode.RETURN_VOID),
+                ), emptyList(), emptyList(),
+            ),
+        ).toMutable()
+        method.applyVoidExitTargetSafeDelegate(
+            RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_INSETS, "p1 .. p1", 1,
+        )
+        val instructions = method.implementation!!.instructions
+        assertEquals(Opcode.NOP, instructions[2].opcode) // Original branch destination.
+        assertEquals(Opcode.INVOKE_STATIC_RANGE, instructions[3].opcode)
+        assertEquals(Opcode.RETURN_VOID, instructions[4].opcode)
+        assertEquals(3, (instructions[0] as OffsetInstruction).codeOffset)
+        assertEquals(20, (instructions[3] as RegisterRangeInstruction).startRegister)
+    }
+
     @Test
     fun `clipboard insets injection compiles p1 above the non-range register limit`() {
         // Original Loup.onComputeInsets: registers_size=21, ins_size=2, p1=v20.
