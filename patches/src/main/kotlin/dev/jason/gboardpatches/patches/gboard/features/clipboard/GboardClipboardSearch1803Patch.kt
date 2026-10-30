@@ -125,6 +125,8 @@ internal val gboardClipboardSearch1803Patch = bytecodePatch(
         // Force the /range encoding so the Morphe inline Smali compiler accepts it.
         if (begins == 0) insets.addInstructions(0, RuntimeCallEmitter.invoke(begin, "p1 .. p1"))
         else check(insets.implementation!!.instructions.first().isMethodReference(begin.encodedAbi))
-        insets.applyVoidExitLifecycleDelegate(RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_INSETS, "")
+        // p1 is v20 on this APK. Unlike v1 (overwritten by native logging), it is
+        // preserved across both native return paths; /range handles the high register.
+        insets.applyVoidExitLifecycleDelegate(RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_INSETS, "p1 .. p1")
     }
 }

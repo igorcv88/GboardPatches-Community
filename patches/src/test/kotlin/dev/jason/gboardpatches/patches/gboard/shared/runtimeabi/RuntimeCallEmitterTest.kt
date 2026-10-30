@@ -43,6 +43,14 @@ class RuntimeCallEmitterTest {
         val range = call as RegisterRangeInstruction
         assertEquals(20, range.startRegister)
         assertEquals(1, range.registerCount)
+        method.addInstructions(
+            1,
+            RuntimeCallEmitter.invoke(RuntimeCallId.CLIPBOARD_NATIVE_SEARCH_INSETS, "p1 .. p1"),
+        )
+        val exit = method.implementation!!.instructions[1]
+        assertEquals(Opcode.INVOKE_STATIC_RANGE, exit.opcode)
+        assertEquals(20, (exit as RegisterRangeInstruction).startRegister)
+        assertEquals(1, exit.registerCount)
     }
 
     @Test
