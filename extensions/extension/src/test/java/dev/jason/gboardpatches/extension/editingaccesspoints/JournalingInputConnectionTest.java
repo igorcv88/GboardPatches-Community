@@ -1,6 +1,7 @@
 package dev.jason.gboardpatches.extension.editingaccesspoints;
 
 import android.view.inputmethod.InputConnection;
+import android.view.inputmethod.ExtractedText;
 import java.lang.reflect.Proxy;
 import org.junit.After;
 import org.junit.Test;
@@ -14,6 +15,7 @@ public class JournalingInputConnectionTest {
     /** Minimal editor whose host undo does nothing, like many non-EditText editors. */
     static final class FakeEditor {
         final StringBuilder text = new StringBuilder();
+        String clipboard = "pasted 😃\n";
         int start, end, composeStart = -1, composeEnd = -1, hostUndo, mutations;
         final InputConnection connection = (InputConnection) Proxy.newProxyInstance(
                 FakeEditor.class.getClassLoader(), new Class<?>[] {InputConnection.class},
@@ -29,7 +31,22 @@ public class JournalingInputConnectionTest {
                             text.delete(end, b); text.delete(a, start); start = end = a; return true;
                         }
                         case "setSelection": start = (Integer) args[0]; end = (Integer) args[1]; return true;
-                        case "performContextMenuAction": hostUndo++; return true;
+                        case "getExtractedText": {
+                            ExtractedText extracted = new ExtractedText();
+                            extracted.text = text.toString(); extracted.startOffset = 0;
+                            extracted.partialStartOffset = extracted.partialEndOffset = -1;
+                            extracted.selectionStart = start; extracted.selectionEnd = end;
+                            return extracted;
+                        }
+                        case "performContextMenuAction": {
+                            int id = (Integer) args[0];
+                            if (id == android.R.id.paste || id == android.R.id.pasteAsPlainText) {
+                                replace(clipboard, false);
+                            } else if (id == android.R.id.cut) {
+                                replace("", false);
+                            } else hostUndo++;
+                            return true;
+                        }
                         case "beginBatchEdit": case "endBatchEdit": return true;
                         default:
                             if (method.getReturnType() == boolean.class) return false;
@@ -201,5 +218,114 @@ public class JournalingInputConnectionTest {
         assertEquals(before + 1, editor.mutations);
         assertEquals(0, JournalingInputConnection.forConnection(editor.connection).journal.undoSize());
         assertEquals(1, JournalingInputConnection.forConnection(editor.connection).journal.redoSize());
+    }
+
+    @Test public void toolbarPasteAndTypingShareOrderedHistory() {
+        EditorActionSession session = new EditorActionSession();
+        FakeEditor editor = setUp(session);
+        InputConnection keyboard = JournalingInputConnection.wrap(editor.connection);
+        keyboard.commitText("hello ", 1);
+        assertTrue(session.execute(EditorAction.PASTE));
+        keyboard.commitText("end", 1);
+        assertEquals("hello pasted 😃\nend", editor.text.toString());
+        assertTrue(session.execute(EditorAction.UNDO));
+        assertEquals("hello pasted 😃\n", editor.text.toString());
+        assertTrue(session.execute(EditorAction.UNDO));
+        assertEquals("hello ", editor.text.toString());
+        assertTrue(session.execute(EditorAction.UNDO));
+        assertEquals("", editor.text.toString());
+        assertFalse(session.execute(EditorAction.UNDO));
+        assertEquals(0, editor.hostUndo); // No unrelated native undo after exhaustion.
+        assertTrue(session.execute(EditorAction.REDO));
+        assertTrue(session.execute(EditorAction.REDO));
+        assertTrue(session.execute(EditorAction.REDO));
+        assertEquals("hello pasted 😃\nend", editor.text.toString());
+        assertFalse(session.execute(EditorAction.REDO));
+        assertEquals(0, editor.hostUndo);
+    }
+
+    @Test public void nativeClipboardCardAndTypingShareOrderedHistory() {
+        EditorActionSession session = new EditorActionSession();
+        FakeEditor editor = setUp(session);
+        InputConnection keyboard = JournalingInputConnection.wrap(editor.connection);
+        keyboard.commitText("before ", 1);
+        long token = session.beginNativePaste(editor.clipboard);
+        assertTrue(token > 0);
+        editor.replace(editor.clipboard, false); // Gboard's stock event bus, not the wrapper.
+        session.observeNativePaste();
+        keyboard.commitText("after", 1);
+        assertTrue(session.execute(EditorAction.UNDO));
+        assertEquals("before " + editor.clipboard, editor.text.toString());
+        assertTrue(session.execute(EditorAction.UNDO));
+        assertEquals("before ", editor.text.toString());
+        assertTrue(session.execute(EditorAction.UNDO));
+        assertEquals("", editor.text.toString());
+        assertTrue(session.execute(EditorAction.REDO));
+        assertTrue(session.execute(EditorAction.REDO));
+        assertTrue(session.execute(EditorAction.REDO));
+        assertEquals("before " + editor.clipboard + "after", editor.text.toString());
+        assertEquals(0, editor.hostUndo);
+    }
+
+    @Test public void contextPastePlainTextAndCutAreIndependentSteps() {
+        EditorActionSession session = new EditorActionSession();
+        FakeEditor editor = setUp(session);
+        InputConnection keyboard = JournalingInputConnection.wrap(editor.connection);
+        keyboard.commitText("abc", 1);
+        assertTrue(keyboard.performContextMenuAction(android.R.id.pasteAsPlainText));
+        assertEquals("abc" + editor.clipboard, editor.text.toString());
+        keyboard.setSelection(0, 3);
+        assertTrue(keyboard.performContextMenuAction(android.R.id.cut));
+        assertEquals(editor.clipboard, editor.text.toString());
+        assertTrue(session.execute(EditorAction.UNDO));
+        assertEquals("abc" + editor.clipboard, editor.text.toString());
+        assertTrue(session.execute(EditorAction.UNDO));
+        assertEquals("abc", editor.text.toString());
+        assertTrue(session.execute(EditorAction.UNDO));
+        assertEquals("", editor.text.toString());
+        assertEquals(0, editor.hostUndo);
+    }
+
+    @Test public void directMultiCharacterCommitDoesNotMergeWithAdjacentTyping() {
+        EditorActionSession session = new EditorActionSession();
+        FakeEditor editor = setUp(session);
+        InputConnection keyboard = JournalingInputConnection.wrap(editor.connection);
+        keyboard.commitText("a", 1);
+        keyboard.commitText("b", 1);
+        keyboard.commitText("CLIP", 1); // Clipboard chip / suggestion via commitText.
+        keyboard.commitText("c", 1);
+        assertTrue(session.execute(EditorAction.UNDO));
+        assertEquals("abCLIP", editor.text.toString());
+        assertTrue(session.execute(EditorAction.UNDO));
+        assertEquals("ab", editor.text.toString());
+        assertTrue(session.execute(EditorAction.UNDO));
+        assertEquals("", editor.text.toString());
+    }
+
+    @Test public void preRecordedCardIsNotDuplicatedWhenVerifiedByEventHook() {
+        EditorActionSession session = new EditorActionSession();
+        FakeEditor editor = setUp(session);
+        InputConnection keyboard = JournalingInputConnection.wrap(editor.connection);
+        assertTrue(session.beginNativePaste(editor.clipboard) > 0);
+        keyboard.commitText(editor.clipboard, 1); // Also intercepted by the wrapper.
+        session.observeNativePaste();
+        assertTrue(session.execute(EditorAction.UNDO));
+        assertEquals("", editor.text.toString());
+        assertFalse(session.execute(EditorAction.UNDO));
+        assertEquals(0, editor.hostUndo);
+    }
+
+    @Test public void oneCharacterNativeCardStaysSeparateFromTypedWord() {
+        EditorActionSession session = new EditorActionSession();
+        FakeEditor editor = setUp(session);
+        InputConnection keyboard = JournalingInputConnection.wrap(editor.connection);
+        keyboard.commitText("a", 1);
+        assertTrue(session.beginNativePaste("X") > 0);
+        keyboard.commitText("X", 1);
+        session.observeNativePaste();
+        assertTrue(session.execute(EditorAction.UNDO));
+        assertEquals("a", editor.text.toString());
+        assertTrue(session.execute(EditorAction.UNDO));
+        assertEquals("", editor.text.toString());
     }
 }

@@ -96,6 +96,16 @@ public final class JournalingInputConnection extends InputConnectionWrapper {
 
     synchronized ImeEditJournal.State state() { return read(); }
 
+    synchronized void breakGroup() { journal.breakGroup(); }
+
+    /** Records an independently verified native/toolbar replacement without losing typing. */
+    synchronized boolean recordObserved(ImeEditJournal.State before, ImeEditJournal.State after) {
+        boolean allowed;
+        try { allowed = policy.getAsBoolean(); } catch (Throwable ignored) { allowed = false; }
+        if (!allowed || batchDepth != 0 || composing || recording) return false;
+        return journal.recordObserved(before, after, SystemClock.uptimeMillis());
+    }
+
     private ImeEditJournal.State read() {
         COUNTS.incrementAndGet(READ);
         return reader.read(raw);
@@ -150,8 +160,20 @@ public final class JournalingInputConnection extends InputConnectionWrapper {
 
     @Override public boolean commitText(CharSequence text, int newCursorPosition) {
         COUNTS.incrementAndGet(COMMIT);
+        // Clipboard suggestions, voice input and other multi-character commits can arrive
+        // directly as commitText, without a clipboard-card callback. Keep their insertion
+        // separate from the word typed immediately before or after them.
+        boolean atomic;
+        synchronized (this) {
+            atomic = !composing && text != null && text.length() > 1;
+            if (atomic) journal.breakGroup();
+        }
         beforeFinal();
-        try { return super.commitText(text, newCursorPosition); } finally { after(); }
+        try { return super.commitText(text, newCursorPosition); }
+        finally {
+            after();
+            if (atomic) synchronized (this) { journal.breakGroup(); }
+        }
     }
 
     @Override public boolean setComposingText(CharSequence text, int newCursorPosition) {
@@ -207,8 +229,16 @@ public final class JournalingInputConnection extends InputConnectionWrapper {
         // deleteSurroundingText. Bracket the down event; the up event never edits.
         if (event == null || event.getAction() != KeyEvent.ACTION_DOWN) return super.sendKeyEvent(event);
         COUNTS.incrementAndGet(KEY);
+        boolean clipboardShortcut = (event.isCtrlPressed()
+                && (event.getKeyCode() == KeyEvent.KEYCODE_V || event.getKeyCode() == KeyEvent.KEYCODE_X))
+                || (event.isShiftPressed() && event.getKeyCode() == KeyEvent.KEYCODE_INSERT);
+        if (clipboardShortcut) synchronized (this) { journal.breakGroup(); }
         beforeFinal();
-        try { return super.sendKeyEvent(event); } finally { after(); }
+        try { return super.sendKeyEvent(event); }
+        finally {
+            after();
+            if (clipboardShortcut) synchronized (this) { journal.breakGroup(); }
+        }
     }
 
     @Override public boolean setSelection(int start, int end) {
@@ -217,8 +247,19 @@ public final class JournalingInputConnection extends InputConnectionWrapper {
     }
 
     @Override public boolean performContextMenuAction(int id) {
-        // Host paste/cut/undo change text outside this journal; the next snapshot proves it.
         synchronized (this) { seal(); journal.breakGroup(); }
+        // Native context-menu paste/cut may go through the wrapped connection without
+        // EditorActionSession (clipboard suggestion, contextual selection menu, etc.).
+        // Only a synchronous, observed replacement becomes one independent undo step.
+        if (id == android.R.id.paste || id == android.R.id.pasteAsPlainText
+                || id == android.R.id.cut) {
+            before();
+            try { return super.performContextMenuAction(id); }
+            finally {
+                after();
+                synchronized (this) { journal.breakGroup(); }
+            }
+        }
         return super.performContextMenuAction(id);
     }
 

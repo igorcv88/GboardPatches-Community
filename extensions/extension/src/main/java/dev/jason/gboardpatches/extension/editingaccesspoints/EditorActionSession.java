@@ -124,7 +124,7 @@ public final class EditorActionSession {
                     if ((action == EditorAction.UNDO) == transaction.undone) return false;
                     return reverse(editor, connection, expected, before);
                 }
-                // Host-owned typing and external pastes stay with the host undo manager.
+                // Operations outside the observed local history remain host-owned.
                 boolean accepted = connection.performContextMenuAction(action.contextMenuId);
                 Snapshot after = before == null ? null : snapshot(connection);
                 return current(editor, connection, expected) && (before == null ? accepted
@@ -138,9 +138,12 @@ public final class EditorActionSession {
                     transaction = EditorEditTransaction.capture(before.text.toString(),
                             before.start, before.end, after.text.toString(), after.start, after.end);
                     if (transaction != null) {
-                        original = before;
-                        pasted = after;
-                        journalConnection = new WeakReference<>(connection);
+                        if (recordInJournal(connection, before, after)) transaction = null;
+                        else {
+                            original = before;
+                            pasted = after;
+                            journalConnection = new WeakReference<>(connection);
+                        }
                     }
                 }
             }
@@ -171,6 +174,8 @@ public final class EditorActionSession {
             InputConnection connection = editor.connection();
             Snapshot before = connection == null ? null : snapshot(connection);
             if (before == null || !current(editor, connection, expected)) return 0;
+            JournalingInputConnection wrapper = JournalingInputConnection.forConnection(connection);
+            if (wrapper != null) wrapper.breakGroup();
             int low = Math.min(before.start, before.end), high = Math.max(before.start, before.end);
             if (before.text.length() - (high - low) + text.length()
                     > EditorEditTransaction.MAX_CHARACTERS) return 0;
@@ -200,13 +205,17 @@ public final class EditorActionSession {
             if (pending.before.same(after)) return; // Dispatch may still be queued.
             clearHistory();
             if (after != null && pending.edit.matches(after.text.toString(), after.start, after.end)) {
-                transaction = pending.edit;
-                original = pending.before;
-                pasted = after;
-                journalConnection = new WeakReference<>(connection);
-                // Native card insertion travels through an event bus. Host undo may also be
-                // asynchronous: never queue it and then issue a competing local inverse.
-                localUndo = true;
+                JournalingInputConnection wrapper = JournalingInputConnection.forConnection(connection);
+                if (wrapper != null) wrapper.breakGroup();
+                if (!recordInJournal(connection, pending.before, after)) {
+                    transaction = pending.edit;
+                    original = pending.before;
+                    pasted = after;
+                    journalConnection = new WeakReference<>(connection);
+                    // Native card dispatch may be asynchronous. Never issue a competing
+                    // host undo before applying this exact verified local inverse.
+                    localUndo = true;
+                }
             }
         } catch (Throwable ignored) { clearHistory(); }
     }
@@ -300,7 +309,11 @@ public final class EditorActionSession {
         ImeEditJournal.State state = wrapper.state();
         ImeEditJournal.Edit edit = state == null ? null
                 : isUndo ? wrapper.journal.peekUndo(state) : wrapper.journal.peekRedo(state);
-        if (edit == null || !current(editor, connection, expected)) return null;
+        if (!current(editor, connection, expected)) return false;
+        if (edit == null) {
+            // An exhausted local chain must not fall through to an unrelated host undo.
+            return wrapper.journal.owns(state) ? Boolean.FALSE : null;
+        }
         // The journal owns this state now; an older paste transaction must not replay over it.
         clearHistory();
         ImeEditJournal.State target = ImeEditJournal.target(state, edit, isUndo);
@@ -328,6 +341,16 @@ public final class EditorActionSession {
     private boolean setOwnSelection(InputConnection connection, int start, int end) {
         pendingOwnSelections.add(new int[] {start, end});
         return connection.setSelection(start, end);
+    }
+
+    /** The same bounded history owns typing and verified paste/cut, but never styled spans. */
+    private static boolean recordInJournal(InputConnection connection, Snapshot before, Snapshot after) {
+        if (before == null || after == null || !before.spans.isEmpty() || !after.spans.isEmpty())
+            return false;
+        JournalingInputConnection wrapper = JournalingInputConnection.forConnection(connection);
+        return wrapper != null && wrapper.recordObserved(
+                new ImeEditJournal.State(before.text.toString(), before.start, before.end),
+                new ImeEditJournal.State(after.text.toString(), after.start, after.end));
     }
 
     private boolean current(Editor editor, InputConnection connection, long expected) {
