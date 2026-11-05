@@ -34,18 +34,3 @@ jobs:
           bash gradlew --build-cache -Pversion=0.0.0-review.${{ github.run_number }} \
             :extensions:extension:testDebugUnitTest :extensions:calculator:testDebugUnitTest \
             :patches:check :patches:buildAndroid :patches:verifyReleaseBundleImport
-      - name: Upload review bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: patches-review-${{ github.sha }}
-          path: patches/build/libs/*.mpp
-          if-no-files-found: error
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results-${{ github.sha }}
-          path: |
-            extensions/*/build/reports/tests/
-            patches/build/reports/tests/
-          if-no-files-found: ignore
