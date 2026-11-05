@@ -20,10 +20,11 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: gradle
-      - uses: android-actions/setup-android@v3
-        with:
-          packages: platform-tools
-          log-accepted-android-sdk-licenses: false
+      - name: Use hosted Android SDK
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          test -x "$SDKMANAGER"
+          "$SDKMANAGER" "platform-tools"
       - name: Test and build review bundle
         env:
           GITHUB_ACTOR: ${{ github.repository_owner }}
@@ -33,18 +34,3 @@ jobs:
           bash gradlew --build-cache -Pversion=0.0.0-review.${{ github.run_number }} \
             :extensions:extension:testDebugUnitTest :extensions:calculator:testDebugUnitTest \
             :patches:check :patches:buildAndroid :patches:verifyReleaseBundleImport
-      - name: Upload review bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: patches-review-${{ github.sha }}
-          path: patches/build/libs/*.mpp
-          if-no-files-found: error
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results-${{ github.sha }}
-          path: |
-            extensions/*/build/reports/tests/
-            patches/build/reports/tests/
-          if-no-files-found: ignore
