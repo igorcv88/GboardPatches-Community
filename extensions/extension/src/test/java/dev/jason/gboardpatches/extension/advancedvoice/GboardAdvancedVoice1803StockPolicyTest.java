@@ -5,14 +5,15 @@ import org.junit.Test;
 
 public final class GboardAdvancedVoice1803StockPolicyTest {
     @Test
-    public void sixFormalBooleanFlagsAreEnabledWithStrictTyping() {
+    public void sevenFormalBooleanFlagsAreEnabledWithStrictTyping() {
         String[] flags = new String[] {
                 GboardAdvancedVoice1803StockPolicy.ENABLE_NGA_FLAG,
                 GboardAdvancedVoice1803StockPolicy.ENABLE_ADVANCED_FEATURES_FLAG,
                 GboardAdvancedVoice1803StockPolicy.ENABLE_DICTATION_SPLIT_INSTALL_FLAG,
                 GboardAdvancedVoice1803StockPolicy.HANDLE_FALLBACK_INSIDE_SD_STACK_FLAG,
                 GboardAdvancedVoice1803StockPolicy.ENABLE_STICKY_MIC_BACKGROUND_FLAG,
-                GboardAdvancedVoice1803StockPolicy.ENABLE_SODA_LONGFORM_EXPERIMENT_FLAG
+                GboardAdvancedVoice1803StockPolicy.ENABLE_SODA_LONGFORM_EXPERIMENT_FLAG,
+                GboardAdvancedVoice1803StockPolicy.ENABLE_S3_AS_FALLBACK_FLAG
         };
         for (String flag : flags) {
             Assert.assertSame(Boolean.TRUE,
