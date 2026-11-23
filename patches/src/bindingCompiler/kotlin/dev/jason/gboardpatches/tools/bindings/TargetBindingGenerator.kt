@@ -10,7 +10,7 @@ import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 object TargetBindingGenerator {
     @JvmStatic
     fun main(args: Array<String>) {
-        require(args.size == 5) {
+        require(args.size in 5..6) {
             "Expected bindings, catalog, optional PortBundle, bindings output, and admission output"
         }
         val profile = Path.of(args[0])
@@ -22,6 +22,7 @@ object TargetBindingGenerator {
             catalogText = Files.readString(productCatalog, StandardCharsets.UTF_8),
             portBundleText = portBundle?.let { Files.readString(it, StandardCharsets.UTF_8) },
             reviewedBindingsText = Files.readString(profile, StandardCharsets.UTF_8),
+            requestedTargetVersion = args.getOrNull(5)?.takeUnless { it == "-" },
         )
         Files.createDirectories(bindingsOutput.parent)
         Files.createDirectories(admissionOutput.parent)

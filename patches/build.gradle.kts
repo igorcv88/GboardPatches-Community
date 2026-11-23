@@ -5,6 +5,7 @@ import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.tasks.Classpath
+import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputFile
@@ -32,6 +33,9 @@ abstract class GenerateTargetBindingsTask @Inject constructor(
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val portBundleFile: RegularFileProperty
 
+    @get:Input
+    abstract val requestedTargetVersion: org.gradle.api.provider.Property<String>
+
     @get:Classpath
     abstract val compilerClasspath: ConfigurableFileCollection
 
@@ -52,6 +56,7 @@ abstract class GenerateTargetBindingsTask @Inject constructor(
                 portBundleFile.orNull?.asFile?.absolutePath ?: "-",
                 bindingsOutputFile.get().asFile.absolutePath,
                 admissionOutputFile.get().asFile.absolutePath,
+                requestedTargetVersion.get(),
             )
         }
     }
@@ -182,6 +187,8 @@ val generateGboardVersionBindings = tasks.register<GenerateTargetBindingsTask>(
 
     dependsOn(bindingCompilerSourceSet.classesTaskName)
     profileFile.set(versionBindingsProfile)
+    requestedTargetVersion.set(providers.gradleProperty("gboardTargetVersion")
+        .orElse(if (portBundleOverride.isPresent) "-" else "18.0.3"))
     productCatalogFile.set(gboardProductCatalog)
     if (portBundleOverride.isPresent) {
         portBundleFile.set(layout.file(portBundleOverride.map { path -> file(path) }))
