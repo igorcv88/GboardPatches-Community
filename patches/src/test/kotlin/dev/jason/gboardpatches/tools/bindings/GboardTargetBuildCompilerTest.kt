@@ -63,6 +63,30 @@ class GboardTargetBuildCompilerTest {
     }
 
     @Test
+    fun `a separately linked 18_5_4 profile uses its own artifact identity`() {
+        val catalog = catalog(
+            bindingContracts = emptyMap(),
+            features = listOf(feature("developer_options", "Developer options",
+                listOf(contribution("developer_options.resources")))),
+        )
+        val bundle = bundle(
+            catalog, "pending", mapOf("developer_options" to setOf("developer_options.resources")),
+            targetVersion = "18.5.4",
+        )
+        val bindings = linkedBindings(
+            """{"format":"gboard-version-bindings.v1","target_version":"18.5.4","profile_version":"2.0.0","projection_sha256":"${"a".repeat(64)}","bindings":{}}""",
+            bundle,
+        )
+        val compiled = GboardTargetBuildCompiler.compile(catalog, bundle, bindings, "18.5.4")
+        assertEquals("18.5.4", compiled.targetVersion)
+        assertEquals(listOf("18.5.4.123456789-release-arm64-v8a"), compiled.artifactIdentity.versionNames)
+        val mismatch = assertThrows(GboardTargetBuildContractException::class.java) {
+            GboardTargetBuildCompiler.compile(catalog, bundle, bindings, "18.0.3")
+        }
+        assertEquals("TARGET_VERSION_MISMATCH", mismatch.code)
+    }
+
+    @Test
     fun `advanced voice flag-only requires only shared flag bindings`() {
         val catalog = catalog(
             bindingContracts = mapOf(
@@ -459,6 +483,7 @@ class GboardTargetBuildCompilerTest {
         catalogText: String,
         status: String,
         admittedByFeature: Map<String, Set<String>>,
+        targetVersion: String = "18.0.3",
     ): String {
         val catalog = JsonParser.parseString(catalogText).asJsonObject
         val features = catalog.getAsJsonArray("features").map { value ->
@@ -490,7 +515,7 @@ class GboardTargetBuildCompilerTest {
                 addProperty("profile_version", "2.0.0")
                 addProperty("profile_sha256", PROFILE_SHA256)
                 addProperty("projection_sha256", PROJECTION_SHA256)
-                addProperty("target_version", "18.0.3")
+                addProperty("target_version", targetVersion)
                 add("target_app", JsonObject().apply {
                     addProperty("id", "gboard")
                     addProperty("package_name", "com.google.android.inputmethod.latin")
@@ -500,7 +525,7 @@ class GboardTargetBuildCompilerTest {
                     addProperty("apk_file_type", "APKM")
                     add("package_names", Gson().toJsonTree(listOf("com.google.android.inputmethod.latin")))
                     add("signatures", Gson().toJsonTree(listOf(TEST_SIGNATURE)))
-                    add("version_names", Gson().toJsonTree(listOf(TEST_VERSION_NAME)))
+                    add("version_names", Gson().toJsonTree(listOf(TEST_VERSION_NAME.replaceFirst("18.0.3", targetVersion))))
                 })
                 add(
                     "binding_exports",
