@@ -65,9 +65,27 @@ class GboardTargetBuildCompilerTest {
     @Test
     fun `a separately linked 18_5_4 profile uses its own artifact identity`() {
         val catalog = catalog(
-            bindingContracts = emptyMap(),
-            features = listOf(feature("developer_options", "Developer options",
-                listOf(contribution("developer_options.resources")))),
+            bindingContracts = mapOf(
+                "flag_bool_getter" to "method",
+                "flag_name_field" to "field",
+            ),
+            features = listOf(
+                feature(
+                    id = "developer_options",
+                    patchName = "Developer options",
+                    contributions = listOf(contribution("developer_options.resources")),
+                ),
+                feature(
+                    id = "advanced_voice_typing",
+                    patchName = "Advanced Voice Typing",
+                    contributions = listOf(
+                        contribution(
+                            "advanced_voice_typing.flag",
+                            listOf("flag_bool_getter", "flag_name_field"),
+                        ),
+                    ),
+                ),
+            ),
         )
         val bundle = bundle(
             catalog, "pending", mapOf("developer_options" to setOf("developer_options.resources")),
