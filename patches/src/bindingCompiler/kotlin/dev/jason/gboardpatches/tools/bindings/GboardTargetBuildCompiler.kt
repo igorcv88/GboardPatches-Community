@@ -36,6 +36,7 @@ object GboardTargetBuildCompiler {
         catalogText: String,
         portBundleText: String?,
         reviewedBindingsText: String,
+        requestedTargetVersion: String? = null,
     ): CompiledGboardTargetBuild {
         val fullRequirements = TargetBindingRequirements.fromProductCatalog(catalogText)
         val catalog = parseObject(catalogText, "PRODUCT_CATALOG_INVALID")
@@ -59,6 +60,12 @@ object GboardTargetBuildCompiler {
             throw GboardTargetBuildContractException(
                 "REVIEWED_BINDINGS_INVALID",
                 error.message.orEmpty(),
+            )
+        }
+        if (requestedTargetVersion != null && projection.targetVersion != requestedTargetVersion) {
+            fail(
+                "TARGET_VERSION_MISMATCH",
+                "Requested target ${requestedTargetVersion} != bindings ${projection.targetVersion}",
             )
         }
         if (admission.targetVersion != null && projection.targetVersion != admission.targetVersion) {

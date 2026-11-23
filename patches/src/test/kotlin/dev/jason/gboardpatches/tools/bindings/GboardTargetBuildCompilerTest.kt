@@ -48,7 +48,12 @@ class GboardTargetBuildCompilerTest {
             """{"format":"gboard-version-bindings.v1","target_version":"18.0.3","profile_version":"2.0.0","projection_sha256":"${"a".repeat(64)}","bindings":{}}"""
             , bundle)
 
-        val compiled = GboardTargetBuildCompiler.compile(catalog, bundle, bindings)
+        val compiled = GboardTargetBuildCompiler.compile(catalog, bundle, bindings, "18.0.3")
+        assertEquals("18.0.3", compiled.targetVersion)
+        val mismatch = assertThrows(GboardTargetBuildContractException::class.java) {
+            GboardTargetBuildCompiler.compile(catalog, bundle, bindings, "18.5.4")
+        }
+        assertEquals("TARGET_VERSION_MISMATCH", mismatch.code)
 
         assertEquals(emptySet<String>(), compiled.requiredBindingKeys)
         assertEquals(setOf("developer_options"), compiled.admittedFeatureIds)
